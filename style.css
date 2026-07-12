@@ -171,6 +171,21 @@ svg#board {
   border-color: var(--accent-color);
 }
 
+.swatch {
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--swatch-c);
+  border: 2px solid transparent;
+}
+
+.swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
 /* ---------- 再生バー ---------- */
 .playbar {
   display: flex;
@@ -321,6 +336,24 @@ details.panel[open] summary::after {
   font-size: 0.8rem;
   font-weight: 600;
   margin-top: 0.3rem;
+}
+
+.formation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.formation-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formation-section[hidden],
+.formation-custom[hidden],
+.btn-group[hidden] {
+  display: none;
 }
 
 .note {

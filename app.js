@@ -17,6 +17,15 @@ const PAD = 3; // ゴールのはみ出し分の余白（m）
 
 const LS_AUTOSAVE = "soccerTactics.autosave.v1";
 const LS_SAVES = "soccerTactics.saves.v1";
+const LS_CUSTOM_FORMATIONS = "soccerTactics.customFormations.v1";
+
+/* ---------- コートカラー ---------- */
+const COURT_THEMES = {
+  vivid:    { c1: "#1f9645", c2: "#25ab50", bg: "#1c8a41" },
+  standard: { c1: "#1b6b34", c2: "#1f7a3b", bg: "#175f2e" },
+  pastel:   { c1: "#8fd19e", c2: "#a3dcae", bg: "#86c795" },
+  classic:  { c1: "#14381d", c2: "#1b4d2a", bg: "#123420" },
+};
 
 /* ---------- フォーメーション定義（フルコート基準の%座標） ---------- */
 const formations = {
@@ -144,6 +153,7 @@ const simpleFormations = {
 /* ---------- 状態 ---------- */
 const state = {
   courtType: "full",
+  courtColor: "vivid",
   portrait: window.innerHeight > window.innerWidth,
   orientationManual: false, // ユーザーが手動で縦横を切り替えたら自動追従をやめる
   tool: "select",           // select | circle | rect | arrow-pass | arrow-run
@@ -249,16 +259,17 @@ function renderPitch() {
   const { W, H } = court();
   const L = layers.pitch;
   L.innerHTML = "";
+  const theme = COURT_THEMES[state.courtColor] || COURT_THEMES.vivid;
 
   // 余白ごと芝生色で塗る
-  el("rect", { x: -PAD, y: -PAD, width: W + PAD * 2, height: H + PAD * 2, fill: "#123420" }, L);
+  el("rect", { x: -PAD, y: -PAD, width: W + PAD * 2, height: H + PAD * 2, fill: theme.bg }, L);
 
   // 芝生ストライプ
   const stripes = state.courtType === "half" ? 6 : 10;
   for (let i = 0; i < stripes; i++) {
     el("rect", {
       x: (i * W) / stripes, y: 0, width: W / stripes, height: H,
-      fill: i % 2 ? "#1b4d2a" : "#14381d",
+      fill: i % 2 ? theme.c2 : theme.c1,
     }, L);
   }
 
@@ -400,7 +411,7 @@ function renderHandles() {
     mkHandle(a.x2, a.y2, "p2");
   }
 
-  // 削除ボタン
+  // 削除ボタン（右上）
   const bb = annoBBox(a);
   const bx = clamp(bb.maxX + 2.2, 2, W - 2);
   const by = clamp(bb.minY - 2.2, 2, H - 2);
@@ -410,6 +421,42 @@ function renderHandles() {
   const c = hr * 0.5;
   el("line", { x1: -c, y1: -c, x2: c, y2: c, stroke: "#fff", "stroke-width": Math.max(0.22, hr * 0.18), "stroke-linecap": "round" }, del);
   el("line", { x1: -c, y1: c, x2: c, y2: -c, stroke: "#fff", "stroke-width": Math.max(0.22, hr * 0.18), "stroke-linecap": "round" }, del);
+
+  // 複製ボタン（左上）
+  const dx = clamp(bb.minX - 2.2, 2, W - 2);
+  const dy = clamp(bb.minY - 2.2, 2, H - 2);
+  const dup = el("g", { class: "handle handle-duplicate", "data-role": "duplicate", transform: `translate(${dx} ${dy})` }, L);
+  el("circle", { r: hr * 1.5, fill: "transparent" }, dup);
+  el("circle", { r: hr * 1.1, fill: "#3b82f6", stroke: "#fff", "stroke-width": 0.16 }, dup);
+  const s = hr * 0.42;
+  const sw = Math.max(0.18, hr * 0.16);
+  el("rect", { x: -s * 0.9, y: -s * 0.5, width: s * 1.15, height: s * 1.15, rx: s * 0.15, fill: "none", stroke: "#fff", "stroke-width": sw }, dup);
+  el("rect", { x: -s * 0.35, y: -s * 1.0, width: s * 1.15, height: s * 1.15, rx: s * 0.15, fill: "none", stroke: "#fff", "stroke-width": sw }, dup);
+}
+
+/* 図形を少しずらした位置に複製する */
+function duplicateAnno(id) {
+  const a = getAnno(id);
+  if (!a) return;
+  pushUndo();
+  const { W, H } = court();
+  const copy = deep(a);
+  copy.id = newAnnoId();
+  const off = 3;
+  if (copy.type === "circle") {
+    copy.cx = clamp(copy.cx + off, 0, W);
+    copy.cy = clamp(copy.cy + off, 0, H);
+  } else if (copy.type === "rect") {
+    copy.x = clamp(copy.x + off, 0, Math.max(0, W - copy.w));
+    copy.y = clamp(copy.y + off, 0, Math.max(0, H - copy.h));
+  } else if (copy.type === "arrow") {
+    copy.x1 = clamp(copy.x1 + off, 0, W); copy.y1 = clamp(copy.y1 + off, 0, H);
+    copy.x2 = clamp(copy.x2 + off, 0, W); copy.y2 = clamp(copy.y2 + off, 0, H);
+  }
+  state.annotations.push(copy);
+  selectAnno(copy.id);
+  updateFramesTimeline();
+  scheduleAutosave();
 }
 
 function selectAnno(id) {
@@ -455,13 +502,44 @@ function activeIds() {
   return ids;
 }
 
-function pentagonPath(r) {
+function pentagonPoints(cx, cy, r, rotDeg) {
   const pts = [];
   for (let i = 0; i < 5; i++) {
-    const a = (-90 + i * 72) * Math.PI / 180;
-    pts.push(`${(Math.cos(a) * r).toFixed(2)},${(Math.sin(a) * r).toFixed(2)}`);
+    const a = (rotDeg + i * 72) * Math.PI / 180;
+    pts.push(`${(cx + r * Math.cos(a)).toFixed(3)},${(cy + r * Math.sin(a)).toFixed(3)}`);
   }
-  return `M ${pts.join(" L ")} Z`;
+  return pts.join(" ");
+}
+
+/* 定番のサッカーボール柄（中央の黒五角形＋周囲5枚の黒五角形を円でクリップ） */
+function buildBallPattern(rb) {
+  const g = el("g", { "pointer-events": "none" });
+  const defs = el("defs", null, g);
+  const clip = el("clipPath", { id: "ball-pattern-clip" }, defs);
+  el("circle", { cx: 0, cy: 0, r: rb * 0.99 }, clip);
+
+  const pat = el("g", { "clip-path": "url(#ball-pattern-clip)" }, g);
+  const pentR = rb * 0.42;
+  const satDist = rb * 0.8;
+
+  el("polygon", { points: pentagonPoints(0, 0, pentR, -90), fill: "#20242b" }, pat);
+  for (let k = 0; k < 5; k++) {
+    const ang = -90 + 36 + k * 72;
+    const cx = satDist * Math.cos(ang * Math.PI / 180);
+    const cy = satDist * Math.sin(ang * Math.PI / 180);
+    el("polygon", { points: pentagonPoints(cx, cy, pentR, ang + 180), fill: "#20242b" }, pat);
+  }
+  // 継ぎ目風の薄い線
+  for (let k = 0; k < 5; k++) {
+    const a1 = (-90 + k * 72) * Math.PI / 180;
+    const a2 = (-90 + 36 + k * 72) * Math.PI / 180;
+    el("line", {
+      x1: (pentR * Math.cos(a1)).toFixed(2), y1: (pentR * Math.sin(a1)).toFixed(2),
+      x2: (satDist * 0.42 * Math.cos(a2)).toFixed(2), y2: (satDist * 0.42 * Math.sin(a2)).toFixed(2),
+      stroke: "#8a9099", "stroke-width": Math.max(0.05, rb * 0.03),
+    }, pat);
+  }
+  return g;
 }
 
 let tokenEls = {};
@@ -497,7 +575,7 @@ function buildTokens() {
   const inner = el("g", { class: "inner", transform: counterRot }, g);
   el("circle", { r: rb + hitPad, fill: "transparent", class: "hit" }, inner);
   el("circle", { r: rb, fill: "#f5f5f5", stroke: "#777", "stroke-width": 0.14 }, inner);
-  el("path", { d: pentagonPath(rb * 0.45), fill: "#222", "pointer-events": "none" }, inner);
+  inner.appendChild(buildBallPattern(rb));
   tokenEls["ball"] = g;
 }
 
@@ -514,7 +592,7 @@ function currentFrame() {
   return state.frames[state.currentFrameIndex];
 }
 
-/* ---------- 軌跡 ---------- */
+/* ---------- 動きの矢印（コマ間の移動を自動でパス/走路矢印として表示） ---------- */
 function drawPaths() {
   layers.paths.innerHTML = "";
   if (!state.showPaths || state.frames.length < 2) return;
@@ -523,18 +601,35 @@ function drawPaths() {
   for (const id of ids) {
     const pts = state.frames.map((f) => f[id]).filter(Boolean);
     if (pts.length < 2) continue;
-    let d = `M ${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`;
-    for (let i = 1; i < pts.length; i++) d += ` L ${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`;
+    const isBall = id === "ball";
 
-    const attrs = { d, fill: "none", "stroke-linecap": "round", "pointer-events": "none" };
-    if (id === "ball") {
-      Object.assign(attrs, { stroke: "rgba(255,255,255,0.65)", "stroke-width": 0.28, "stroke-dasharray": "0.9 0.9" });
-    } else if (id.startsWith("p-a")) {
-      Object.assign(attrs, { stroke: "rgba(0,210,255,0.45)", "stroke-width": 0.3, "stroke-dasharray": "1.1 1.1" });
-    } else {
-      Object.assign(attrs, { stroke: "rgba(255,65,108,0.45)", "stroke-width": 0.3, "stroke-dasharray": "1.1 1.1" });
+    for (let i = 1; i < pts.length; i++) {
+      const p0 = pts[i - 1], p1 = pts[i];
+      if (dist(p0, p1) < 0.3) continue; // ほとんど動いていない区間は矢印を出さない
+
+      const attrs = {
+        x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
+        x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
+        "stroke-linecap": "round", "pointer-events": "none",
+      };
+      if (isBall) {
+        Object.assign(attrs, {
+          stroke: "rgba(255,255,255,0.85)", "stroke-width": 0.28,
+          "marker-end": "url(#ah-trail-pass)",
+        });
+      } else if (id.startsWith("p-a")) {
+        Object.assign(attrs, {
+          stroke: "rgba(0,210,255,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1",
+          "marker-end": "url(#ah-trail-run-a)",
+        });
+      } else {
+        Object.assign(attrs, {
+          stroke: "rgba(255,65,108,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1",
+          "marker-end": "url(#ah-trail-run-b)",
+        });
+      }
+      el("line", attrs, layers.paths);
     }
-    el("path", attrs, layers.paths);
   }
 }
 
@@ -779,6 +874,7 @@ function serializeDoc() {
   return deep({
     v: 1,
     courtType: state.courtType,
+    courtColor: state.courtColor,
     playerCountA: state.playerCountA,
     playerCountB: state.playerCountB,
     players: state.players,
@@ -797,8 +893,11 @@ function loadDoc(doc) {
   activeAnim = null;
 
   state.courtType = COURTS[doc.courtType] ? doc.courtType : "full";
-  state.playerCountA = clamp(parseInt(doc.playerCountA, 10) || 8, 1, 11);
-  state.playerCountB = clamp(parseInt(doc.playerCountB, 10) || 8, 1, 11);
+  state.courtColor = COURT_THEMES[doc.courtColor] ? doc.courtColor : "vivid";
+  const aRaw = parseInt(doc.playerCountA, 10);
+  const bRaw = parseInt(doc.playerCountB, 10);
+  state.playerCountA = clamp(Number.isFinite(aRaw) ? aRaw : 8, 1, 11);
+  state.playerCountB = clamp(Number.isFinite(bRaw) ? bRaw : 8, 0, 11);
 
   state.players = {};
   ensurePlayers();
@@ -970,7 +1069,8 @@ function importFromFile(file) {
 
 /* ---------- 人数変更 ---------- */
 function setPlayerCount(team, count, skipUndo) {
-  const newCount = clamp(count, 1, 11);
+  const min = team === "b" ? 0 : 1; // チームBは相手なし（0人）にもできる
+  const newCount = clamp(count, min, 11);
   const old = team === "a" ? state.playerCountA : state.playerCountB;
   if (newCount === old) return;
   if (!skipUndo) pushUndo();
@@ -985,6 +1085,7 @@ function setPlayerCount(team, count, skipUndo) {
   drawPaths();
   updateFramesTimeline();
   syncCountsUI();
+  updateFormationPanels();
   scheduleAutosave();
 }
 
@@ -1029,6 +1130,154 @@ function setCourtType(type) {
   scheduleAutosave();
 }
 
+function setCourtColor(theme) {
+  if (!COURT_THEMES[theme] || theme === state.courtColor) return;
+  state.courtColor = theme;
+  renderPitch();
+  updateToolbarUI();
+  scheduleAutosave();
+}
+
+/* ---------- 自作フォーメーション（11人以外の人数用） ---------- */
+function readCustomFormations() {
+  try {
+    const raw = localStorage.getItem(LS_CUSTOM_FORMATIONS);
+    const obj = raw ? JSON.parse(raw) : {};
+    return obj && typeof obj === "object" ? obj : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+function writeCustomFormations(all) {
+  try {
+    localStorage.setItem(LS_CUSTOM_FORMATIONS, JSON.stringify(all));
+  } catch (e) {
+    alert("保存に失敗しました（端末の保存容量を確認してください）");
+  }
+}
+
+/* 現在のチームの配置を「チームA基準・0〜100%」に正規化して取得する */
+function captureTeamPositionsAsBasis(team) {
+  const { W, H } = court();
+  const count = team === "a" ? state.playerCountA : state.playerCountB;
+  const frame = currentFrame();
+  const positions = {};
+  for (let i = 1; i <= count; i++) {
+    const id = `p-${team}${i}`;
+    const p = frame[id];
+    if (!p) continue;
+    let xPct = (p.x / W) * 100;
+    if (team === "b") xPct = 100 - xPct;
+    positions[i] = { x: clamp(xPct, 0, 100), y: clamp((p.y / H) * 100, 0, 100), role: state.players[id].label || "" };
+  }
+  return positions;
+}
+
+function saveCustomFormation(team) {
+  const count = team === "a" ? state.playerCountA : state.playerCountB;
+  if (count < 1) return;
+  const inputEl = $(`custom-formation-name-${team}`);
+  const name = inputEl.value.trim();
+  if (!name) {
+    alert("配置の名前を入力してください（例: 3-2、ロンド用など）");
+    return;
+  }
+  const all = readCustomFormations();
+  const list = all[count] || (all[count] = []);
+  list.push({ id: newAnnoId(), name, positions: captureTeamPositionsAsBasis(team), savedAt: Date.now() });
+  writeCustomFormations(all);
+  inputEl.value = "";
+  renderCustomFormationList(team);
+}
+
+function applyCustomFormationTo(team, count, entry) {
+  stopPlayback();
+  cancelAnim();
+  pushUndo();
+  const { W, H } = court();
+  const frame = currentFrame();
+  for (let i = 1; i <= count; i++) {
+    const id = `p-${team}${i}`;
+    const b = entry.positions[i];
+    if (!b) continue;
+    const xm = (b.x / 100) * W;
+    frame[id] = { x: team === "a" ? xm : W - xm, y: (b.y / 100) * H };
+    state.players[id].label = b.role || "";
+  }
+  buildTokens();
+  animateToFrame(state.currentFrameIndex, 350, () => {
+    drawPaths();
+    updateFramesTimeline();
+  });
+  scheduleAutosave();
+}
+
+function deleteCustomFormation(team, count, id) {
+  const all = readCustomFormations();
+  if (!all[count]) return;
+  if (!confirm("この配置を削除しますか？")) return;
+  all[count] = all[count].filter((e) => e.id !== id);
+  writeCustomFormations(all);
+  renderCustomFormationList(team);
+}
+
+function renderCustomFormationList(team) {
+  const count = team === "a" ? state.playerCountA : state.playerCountB;
+  const listEl = $(`custom-formation-list-${team}`);
+  if (!listEl) return;
+  listEl.innerHTML = "";
+  const all = readCustomFormations();
+  const entries = (all[count] || []).slice().sort((x, y) => (y.savedAt || 0) - (x.savedAt || 0));
+  if (entries.length === 0) {
+    const p = document.createElement("div");
+    p.className = "saves-empty";
+    p.textContent = `${count}人用の保存済み配置はまだありません`;
+    listEl.appendChild(p);
+    return;
+  }
+  for (const entry of entries) {
+    const row = document.createElement("div");
+    row.className = "save-row-item";
+
+    const info = document.createElement("div");
+    info.className = "save-info";
+    const nm = document.createElement("div");
+    nm.className = "save-name";
+    nm.textContent = entry.name;
+    info.appendChild(nm);
+
+    const btnApply = document.createElement("button");
+    btnApply.textContent = "適用";
+    btnApply.addEventListener("click", () => applyCustomFormationTo(team, count, entry));
+
+    const btnDel = document.createElement("button");
+    btnDel.textContent = "✕";
+    btnDel.className = "danger";
+    btnDel.addEventListener("click", () => deleteCustomFormation(team, count, entry.id));
+
+    row.appendChild(info);
+    row.appendChild(btnApply);
+    row.appendChild(btnDel);
+    listEl.appendChild(row);
+  }
+}
+
+/* 人数に応じてプリセット/自作フォーメーションのパネル表示を切り替える */
+function updateFormationPanels() {
+  for (const team of ["a", "b"]) {
+    const count = team === "a" ? state.playerCountA : state.playerCountB;
+    const section = $(`formation-section-${team}`);
+    if (!section) continue;
+    section.hidden = count === 0;
+    if (count === 0) continue;
+    const is11 = count === 11;
+    $(`formation-presets-${team}`).hidden = !is11;
+    $(`formation-custom-${team}`).hidden = is11;
+    if (!is11) renderCustomFormationList(team);
+  }
+}
+
 /* ---------- ツール ---------- */
 function setTool(tool) {
   state.tool = tool;
@@ -1042,6 +1291,9 @@ function updateToolbarUI() {
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.classList.toggle("active", b.dataset.court === state.courtType);
+  });
+  document.querySelectorAll("[data-theme]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.theme === state.courtColor);
   });
   $("btn-orientation").classList.toggle("active", state.portrait);
 }
@@ -1080,6 +1332,10 @@ function onPointerDown(e) {
     const role = handleG.dataset.role;
     if (role === "delete") {
       if (state.selectedAnno) deleteAnno(state.selectedAnno);
+      return;
+    }
+    if (role === "duplicate") {
+      if (state.selectedAnno) duplicateAnno(state.selectedAnno);
       return;
     }
     beginHandleDrag(role, pt);
@@ -1342,11 +1598,12 @@ function renderAll() {
   drawPaths();
   updateFramesTimeline();
   syncCountsUI();
+  updateFormationPanels();
   updateToolbarUI();
   updatePlayBtn();
   $("speed-slider").value = state.speed;
   $("speed-val").textContent = `${state.speed.toFixed(1)}s / コマ`;
-  updateToggleBtn($("btn-toggle-paths"), state.showPaths, "🎯 軌跡の表示");
+  updateToggleBtn($("btn-toggle-paths"), state.showPaths, "🏹 動きの矢印");
   updateToggleBtn($("btn-loop-playback"), state.loopPlayback, "🔁 ループ再生");
 }
 
@@ -1368,6 +1625,9 @@ function setupEventListeners() {
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.addEventListener("click", () => setCourtType(b.dataset.court));
+  });
+  document.querySelectorAll("[data-theme]").forEach((b) => {
+    b.addEventListener("click", () => setCourtColor(b.dataset.theme));
   });
   $("btn-orientation").addEventListener("click", () => {
     state.portrait = !state.portrait;
@@ -1446,7 +1706,7 @@ function setupEventListeners() {
   // オプション
   $("btn-toggle-paths").addEventListener("click", () => {
     state.showPaths = !state.showPaths;
-    updateToggleBtn($("btn-toggle-paths"), state.showPaths, "🎯 軌跡の表示");
+    updateToggleBtn($("btn-toggle-paths"), state.showPaths, "🏹 動きの矢印");
     drawPaths();
     scheduleAutosave();
   });
@@ -1472,7 +1732,7 @@ function setupEventListeners() {
     setPlayerCount("b", state.playerCountB + 1, true);
   });
   $("btn-both-dec").addEventListener("click", () => {
-    if (state.playerCountA <= 1 && state.playerCountB <= 1) return;
+    if (state.playerCountA <= 1 && state.playerCountB <= 0) return;
     pushUndo();
     setPlayerCount("a", state.playerCountA - 1, true);
     setPlayerCount("b", state.playerCountB - 1, true);
@@ -1481,6 +1741,10 @@ function setupEventListeners() {
   $("btn-a-dec").addEventListener("click", () => setPlayerCount("a", state.playerCountA - 1));
   $("btn-b-inc").addEventListener("click", () => setPlayerCount("b", state.playerCountB + 1));
   $("btn-b-dec").addEventListener("click", () => setPlayerCount("b", state.playerCountB - 1));
+
+  // 自作フォーメーションの保存
+  $("btn-save-formation-a").addEventListener("click", () => saveCustomFormation("a"));
+  $("btn-save-formation-b").addEventListener("click", () => saveCustomFormation("b"));
 
   // 保存
   $("btn-save").addEventListener("click", saveCurrentAs);

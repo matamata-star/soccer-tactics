@@ -40,6 +40,12 @@
           <button data-court="blank" class="court-btn">無地</button>
           <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
         </div>
+        <div class="tool-group">
+          <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
+          <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
+          <button class="swatch" data-theme="pastel" title="ライトグリーン" style="--swatch-c:#8fd19e"></button>
+          <button class="swatch" data-theme="classic" title="ダークグリーン" style="--swatch-c:#14381d"></button>
+        </div>
       </div>
 
       <!-- コート (すべてSVGで描画) -->
@@ -61,6 +67,15 @@
             </marker>
             <marker id="ah-run" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
               <path d="M0 0 L6 3 L0 6 Z" fill="#ffd54a"/>
+            </marker>
+            <marker id="ah-trail-pass" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(255,255,255,0.9)"/>
+            </marker>
+            <marker id="ah-trail-run-a" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(0,210,255,0.9)"/>
+            </marker>
+            <marker id="ah-trail-run-b" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(255,65,108,0.9)"/>
             </marker>
           </defs>
           <g id="scene">
@@ -101,7 +116,7 @@
             <input type="range" id="speed-slider" min="0.2" max="3.0" step="0.1" value="1.0">
           </div>
           <button id="btn-loop-playback">🔁 ループ再生: OFF</button>
-          <button id="btn-toggle-paths">🎯 軌跡の表示: ON</button>
+          <button id="btn-toggle-paths">🏹 動きの矢印: ON</button>
           <button id="btn-clear-frames">⏮ 配置をリセット（全コマ削除）</button>
         </div>
       </details>
@@ -134,19 +149,39 @@
             </div>
           </div>
 
-          <h4 class="sub-head team-a-label">チーム A フォーメーション（11人時）</h4>
-          <div class="btn-group">
-            <button class="btn-formation-a" data-formation="4-4-2">4-4-2</button>
-            <button class="btn-formation-a" data-formation="4-3-3">4-3-3</button>
-            <button class="btn-formation-a" data-formation="3-5-2">3-5-2</button>
+          <div class="formation-section" id="formation-section-a">
+            <h4 class="sub-head team-a-label">チーム A フォーメーション</h4>
+            <div class="btn-group" id="formation-presets-a">
+              <button class="btn-formation-a" data-formation="4-4-2">4-4-2</button>
+              <button class="btn-formation-a" data-formation="4-3-3">4-3-3</button>
+              <button class="btn-formation-a" data-formation="3-5-2">3-5-2</button>
+            </div>
+            <div class="formation-custom" id="formation-custom-a" hidden>
+              <p class="note">11人以外は好きな配置を作って名前を付けて保存できます</p>
+              <div class="save-row">
+                <input id="custom-formation-name-a" placeholder="配置の名前（例: 3-2）" maxlength="20">
+                <button id="btn-save-formation-a" class="primary">保存</button>
+              </div>
+              <div id="custom-formation-list-a" class="saves-list"></div>
+            </div>
           </div>
-          <h4 class="sub-head team-b-label">チーム B フォーメーション（11人時）</h4>
-          <div class="btn-group">
-            <button class="btn-formation-b" data-formation="4-4-2">4-4-2</button>
-            <button class="btn-formation-b" data-formation="4-3-3">4-3-3</button>
-            <button class="btn-formation-b" data-formation="3-5-2">3-5-2</button>
+
+          <div class="formation-section" id="formation-section-b">
+            <h4 class="sub-head team-b-label">チーム B フォーメーション</h4>
+            <div class="btn-group" id="formation-presets-b">
+              <button class="btn-formation-b" data-formation="4-4-2">4-4-2</button>
+              <button class="btn-formation-b" data-formation="4-3-3">4-3-3</button>
+              <button class="btn-formation-b" data-formation="3-5-2">3-5-2</button>
+            </div>
+            <div class="formation-custom" id="formation-custom-b" hidden>
+              <p class="note">11人以外は好きな配置を作って名前を付けて保存できます</p>
+              <div class="save-row">
+                <input id="custom-formation-name-b" placeholder="配置の名前（例: 3-2）" maxlength="20">
+                <button id="btn-save-formation-b" class="primary">保存</button>
+              </div>
+              <div id="custom-formation-list-b" class="saves-list"></div>
+            </div>
           </div>
-          <p class="note">※ 10人以下のときはボタンに関係なく人数に応じた基本配置になります</p>
         </div>
       </details>
 
@@ -174,8 +209,11 @@
             <li>選手・ボールはドラッグで動かせます。ボールの近くの選手を動かすとボールも一緒に動きます。</li>
             <li>選手をタップすると番号とラベル（名前・役割）を変えられます。</li>
             <li>◯・▢・矢印ボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
-            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）ができます。</li>
+            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。</li>
+            <li>選手やボールをコマ間で動かすと、その移動が自動でパス（実線）・走路（破線）の矢印として表示されます。</li>
+            <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
+            <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
             <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
           </ul>
         </div>
