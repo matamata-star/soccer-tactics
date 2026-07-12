@@ -754,6 +754,7 @@ function buildBallPattern(rb) {
 
   const pat = el("g", { "clip-path": "url(#ball-pattern-clip)" }, g);
   const pentR = rb * 0.42;
+  const satPentR = pentR * 0.86; // 周辺の五角形は中央より少し小さく
   const satDist = rb * 0.8;
 
   el("polygon", { points: pentagonPoints(0, 0, pentR, -90), fill: "#20242b" }, pat);
@@ -761,7 +762,7 @@ function buildBallPattern(rb) {
     const ang = -90 + 36 + k * 72;
     const cx = satDist * Math.cos(ang * Math.PI / 180);
     const cy = satDist * Math.sin(ang * Math.PI / 180);
-    el("polygon", { points: pentagonPoints(cx, cy, pentR, ang + 180), fill: "#20242b" }, pat);
+    el("polygon", { points: pentagonPoints(cx, cy, satPentR, ang + 180), fill: "#20242b" }, pat);
   }
   // 継ぎ目風の薄い線
   for (let k = 0; k < 5; k++) {

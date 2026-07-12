@@ -171,19 +171,29 @@ svg#board {
   border-color: var(--accent-color);
 }
 
+/* 色見本は正方形のチップ。.toolbar button のtransparent背景より
+   確実に優先させるため .toolbar .swatch という2クラスのセレクタで指定する */
 .swatch {
-  width: 32px;
-  height: 32px;
-  min-height: 32px;
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
   padding: 0;
-  border-radius: 50%;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.toolbar .swatch {
   background: var(--swatch-c);
-  border: 2px solid transparent;
 }
 
 .swatch.active {
   border-color: #fff;
   box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+/* .toolbar button.active の緑背景に負けないよう、選択中も本来の色見本を表示する */
+.toolbar .swatch.active {
+  background: var(--swatch-c);
 }
 
 /* ---------- 再生バー ---------- */
