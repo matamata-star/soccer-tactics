@@ -1107,7 +1107,7 @@ function applyFormation(team, formationName) {
   const positions = getFormationPositions(team, formationName, onPitchCount);
   for (const key of Object.keys(positions)) {
     frame[key] = { x: positions[key].x, y: positions[key].y };
-    state.players[key].label = positions[key].role || "";
+    if (state.courtType !== "blank") state.players[key].label = positions[key].role || "";
   }
   // 12人目以降は控えのまま（フォーメーションの対象外）。位置がなければ控えへ補完するだけ
   for (let i = 12; i <= count; i++) {
@@ -1527,6 +1527,7 @@ function splitByRatio(total, ratios) {
    FW:MF:DF = 1:2:1（＋GK1人）の比率でラベルを貼り直す。固有名を付けた選手は対象外＝一切変更しない。
    12人目以降は控えエリアに直接入るポジション未定の選手なので、ラベル付け対象からも外す。 */
 function reassignRoleLabels(team, count) {
+  if (state.courtType === "blank") return; // 無地コートは既定でラベル無し
   const onPitchCount = Math.min(count, 11);
   const eligible = [];
   for (let i = 1; i <= onPitchCount; i++) {
@@ -1611,6 +1612,13 @@ function setCourtType(type) {
         frame[key].x = clamp(frame[key].x * sx, 0, n.W);
         frame[key].y = clamp(frame[key].y * sy, 0, n.H);
       }
+    }
+  }
+  if (type === "blank") {
+    // 無地コートは既定でラベル無し。GK/DF/MF/FWの自動ラベルのみクリアし、固有名は残す
+    for (const id of activeIds()) {
+      const label = (state.players[id].label || "").trim();
+      if (POSITION_LABELS.has(label)) state.players[id].label = "";
     }
   }
   for (const a of state.annotations) {
@@ -2341,7 +2349,7 @@ function setupEventListeners() {
       state.playerCountB = 0;
       state.frames = [createHalfDefaultFrame()];
     } else {
-      state.frames = [createDefaultFrame(true)];
+      state.frames = [createDefaultFrame(state.courtType !== "blank")];
     }
     state.currentFrameIndex = 0;
     buildTokens();
@@ -2431,8 +2439,9 @@ function setupEventListeners() {
   $("editor-backdrop").addEventListener("pointerdown", (e) => {
     if (e.target === $("editor-backdrop")) closeLabelEditor();
   });
-  $("edit-label").addEventListener("keydown", (e) => {
+  $("label-editor").addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveLabelEditor();
+    else if (e.key === "Escape") closeLabelEditor();
   });
 
   // リサイズ（縦横の自動追従）
