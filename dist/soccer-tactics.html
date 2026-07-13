@@ -37,6 +37,12 @@
           <button data-court="blank" class="court-btn">無地</button>
           <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
         </div>
+        <div class="tool-group" id="half-facing-group" hidden>
+          <button data-facing="left" class="facing-btn active" title="ゴールを左向きに">⬅</button>
+          <button data-facing="up" class="facing-btn" title="ゴールを上向きに">⬆</button>
+          <button data-facing="down" class="facing-btn" title="ゴールを下向きに">⬇</button>
+          <button data-facing="right" class="facing-btn" title="ゴールを右向きに">➡</button>
+        </div>
         <div class="tool-group">
           <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
           <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
@@ -77,6 +83,7 @@
           </defs>
           <g id="scene">
             <g id="layer-pitch"></g>
+            <g id="layer-bench"></g>
             <g id="layer-anno"></g>
             <g id="layer-paths"></g>
             <g id="layer-tokens"></g>
@@ -121,6 +128,10 @@
       <details class="panel" id="panel-team">
         <summary>👥 人数・フォーメーション</summary>
         <div class="panel-body">
+          <div class="btn-group-2">
+            <button id="btn-swap-teams" title="青チームと赤チームの場所をまるごと入れ替えます">⇄ 青と赤を入替</button>
+            <button id="btn-align-roles" title="同じ役割（DF・MFなど）のラベルが付いた選手を横一列に揃えます">📏 ラインを揃える</button>
+          </div>
           <div class="player-count-row">
             <span class="count-label">両チーム同時</span>
             <div class="count-controls">
@@ -211,6 +222,9 @@
             <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
             <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
+            <li>半面コートでは⬅⬆⬇➡ボタンでゴールの向きを選べます。</li>
+            <li>コート下の「ベンチ（控え）」帯に選手をドラッグすると控えにできます（無地コートを除く）。</li>
+            <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」で同じ役割の選手を一列に整列できます（その後は自由に動かせます）。</li>
             <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
           </ul>
         </div>
@@ -248,6 +262,7 @@ const COURTS = {
   blank: { W: 105,  H: 68 },
 };
 const PAD = 3; // ゴールのはみ出し分の余白（m）
+const BENCH_DEPTH = 11; // 控え選手ベンチ帯の奥行き（m）。無地コートでは使わない
 
 const LS_AUTOSAVE = "soccerTactics.autosave.v1";
 const LS_SAVES = "soccerTactics.saves.v1";
@@ -390,6 +405,7 @@ const state = {
   courtColor: "vivid",
   portrait: window.innerHeight > window.innerWidth,
   orientationManual: false, // ユーザーが手動で縦横を切り替えたら自動追従をやめる
+  halfFacing: "left",       // 半面コート専用: left | right | up | down（ゴールの向き）
   tool: "select",           // select | circle | rect | arrow-pass | arrow-run
   frames: [],               // 各コマ: { "p-a1": {x,y}, ..., "ball": {x,y} } （メートル座標）
   currentFrameIndex: 0,
@@ -413,6 +429,7 @@ const svg = $("board");
 const scene = $("scene");
 const layers = {
   pitch:   $("layer-pitch"),
+  bench:   $("layer-bench"),
   anno:    $("layer-anno"),
   paths:   $("layer-paths"),
   tokens:  $("layer-tokens"),
@@ -463,19 +480,49 @@ function clientToLogical(cx, cy) {
   return { x: p.x, y: p.y };
 }
 
+/* 半面コートは4方向のゴール向き、フル/無地コートは従来の縦横トグルを使う */
+function halfFacingToOrientation(facing) {
+  switch (facing) {
+    case "right": return { portrait: false, flip: true };
+    case "up":    return { portrait: true, flip: false };
+    case "down":  return { portrait: true, flip: true };
+    case "left":
+    default:      return { portrait: false, flip: false };
+  }
+}
+
+function effectiveOrientation() {
+  if (state.courtType === "half") return halfFacingToOrientation(state.halfFacing);
+  return { portrait: state.portrait, flip: false };
+}
+
+function benchActive() {
+  return state.courtType !== "blank";
+}
+
 /* ---------- ビューボックス / 向き ---------- */
 function applyViewBox() {
   const { W, H } = court();
-  let vw, vh;
-  if (state.portrait) {
-    vw = H + PAD * 2; vh = W + PAD * 2;
-    svg.setAttribute("viewBox", `${-PAD} ${-PAD} ${vw} ${vh}`);
-    scene.setAttribute("transform", `translate(${H} 0) rotate(90)`);
+  const { portrait, flip } = effectiveOrientation();
+  const extraBottom = benchActive() ? BENCH_DEPTH : 0; // ベンチ帯の分だけH方向を拡張
+
+  let vw, vh, originX, originY, transform;
+  if (portrait) {
+    vw = H + PAD * 2 + extraBottom;
+    vh = W + PAD * 2;
+    originX = -(H + PAD + extraBottom);
+    originY = -PAD;
+    transform = flip ? `rotate(90) translate(${W} 0) scale(-1,1)` : "rotate(90)";
   } else {
-    vw = W + PAD * 2; vh = H + PAD * 2;
-    svg.setAttribute("viewBox", `${-PAD} ${-PAD} ${vw} ${vh}`);
-    scene.removeAttribute("transform");
+    vw = W + PAD * 2;
+    vh = H + PAD * 2 + extraBottom;
+    originX = -PAD;
+    originY = -PAD;
+    transform = flip ? `translate(${W} 0) scale(-1,1)` : "";
   }
+  svg.setAttribute("viewBox", `${originX} ${originY} ${vw} ${vh}`);
+  if (transform) scene.setAttribute("transform", transform);
+  else scene.removeAttribute("transform");
   svg.style.aspectRatio = `${vw} / ${vh}`;
 
   // 高さ制限に収まるよう幅も明示的に絞る（レターボックスの余白をなくす）
@@ -488,12 +535,33 @@ function applyViewBox() {
   if (w < availW) svg.style.width = `${Math.round(w)}px`;
 }
 
+/* ---------- 控え選手ベンチ帯（将棋の駒台のような、コート外の待機スペース） ---------- */
+function renderBench() {
+  const L = layers.bench;
+  L.innerHTML = "";
+  if (!benchActive()) return;
+  const { W, H } = court();
+  const y0 = H;
+  el("rect", { x: -PAD, y: y0, width: W + PAD * 2, height: BENCH_DEPTH, fill: "rgba(8,12,18,0.55)" }, L);
+  el("line", {
+    x1: -PAD, y1: y0, x2: W + PAD, y2: y0,
+    stroke: "rgba(255,255,255,0.3)", "stroke-width": 0.3, "stroke-dasharray": "1.4 1.2",
+  }, L);
+  const fs = Math.min(3.4, BENCH_DEPTH * 0.26);
+  const label = el("text", {
+    x: 1, y: y0 + fs * 1.15, "font-size": fs, "font-weight": 700,
+    fill: "rgba(255,255,255,0.55)",
+  }, L);
+  label.textContent = "ベンチ（控え）";
+}
+
 /* ---------- ピッチ描画 ---------- */
 function renderPitch() {
   const { W, H } = court();
   const L = layers.pitch;
   L.innerHTML = "";
   const theme = COURT_THEMES[state.courtColor] || COURT_THEMES.vivid;
+  renderBench();
 
   // 余白ごと芝生色で塗る
   el("rect", { x: -PAD, y: -PAD, width: W + PAD * 2, height: H + PAD * 2, fill: theme.bg }, L);
@@ -787,7 +855,11 @@ function buildTokens() {
   const rb = ballR();
   const ppm = pxPerMeter();
   const hitPad = Math.max(0.8, 8 / ppm);
-  const counterRot = state.portrait ? "rotate(-90)" : null;
+  const { portrait, flip } = effectiveOrientation();
+  // シーン全体の回転・反転を打ち消して、番号やボール柄が正しい向きで見えるようにする
+  const counterRot = flip
+    ? (portrait ? "scale(-1,1) rotate(-90)" : "scale(-1,1)")
+    : (portrait ? "rotate(-90)" : null);
 
   for (const id of activeIds()) {
     const meta = state.players[id];
@@ -1059,9 +1131,11 @@ function updateHUD() {
 
 function buildThumbSvg(frame) {
   const { W, H } = court();
+  const extraBottom = benchActive() ? BENCH_DEPTH : 0;
   const s = document.createElementNS(SVGNS, "svg");
-  s.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  s.setAttribute("viewBox", `0 0 ${W} ${H + extraBottom}`);
   el("rect", { x: 0, y: 0, width: W, height: H, fill: "#17402a" }, s);
+  if (extraBottom) el("rect", { x: 0, y: H, width: W, height: extraBottom, fill: "rgba(8,12,18,0.55)" }, s);
   // 図形をうっすら
   for (const a of state.annotations) {
     if (a.type === "circle") {
@@ -1110,6 +1184,7 @@ function serializeDoc() {
     v: 1,
     courtType: state.courtType,
     courtColor: state.courtColor,
+    halfFacing: state.halfFacing,
     playerCountA: state.playerCountA,
     playerCountB: state.playerCountB,
     players: state.players,
@@ -1129,6 +1204,7 @@ function loadDoc(doc) {
 
   state.courtType = COURTS[doc.courtType] ? doc.courtType : "full";
   state.courtColor = COURT_THEMES[doc.courtColor] ? doc.courtColor : "vivid";
+  state.halfFacing = ["left", "right", "up", "down"].includes(doc.halfFacing) ? doc.halfFacing : "left";
   const aRaw = parseInt(doc.playerCountA, 10);
   const bRaw = parseInt(doc.playerCountB, 10);
   state.playerCountA = clamp(Number.isFinite(aRaw) ? aRaw : 8, 1, 11);
@@ -1373,6 +1449,86 @@ function setCourtColor(theme) {
   scheduleAutosave();
 }
 
+/* ---------- 半面コートのゴール向き ---------- */
+function setHalfFacing(facing) {
+  if (!["left", "right", "up", "down"].includes(facing) || facing === state.halfFacing) return;
+  state.halfFacing = facing;
+  selectAnno(null);
+  renderAll();
+  scheduleAutosave();
+}
+
+/* ---------- チーム入替（青と赤の場所をまるごと入れ替える） ---------- */
+function swapTeams() {
+  pushUndo();
+
+  const tmpCount = state.playerCountA;
+  state.playerCountA = state.playerCountB;
+  state.playerCountB = tmpCount;
+
+  for (let i = 1; i <= 11; i++) {
+    const aKey = `p-a${i}`, bKey = `p-b${i}`;
+    const aMeta = state.players[aKey], bMeta = state.players[bKey];
+    const tmpMeta = { num: aMeta.num, label: aMeta.label };
+    aMeta.num = bMeta.num; aMeta.label = bMeta.label;
+    bMeta.num = tmpMeta.num; bMeta.label = tmpMeta.label;
+
+    for (const frame of state.frames) {
+      const aPos = frame[aKey];
+      const bPos = frame[bKey];
+      if (bPos !== undefined) frame[aKey] = bPos; else delete frame[aKey];
+      if (aPos !== undefined) frame[bKey] = aPos; else delete frame[bKey];
+    }
+  }
+
+  buildTokens();
+  updateTokenPositions(currentFrame());
+  drawPaths();
+  updateFramesTimeline();
+  syncCountsUI();
+  updateFormationPanels();
+  scheduleAutosave();
+}
+
+/* ---------- 同じ役割ラベルの選手を横一列に整列（一度きりのスナップ、以後は自由に動かせる） ---------- */
+function alignByRole() {
+  pushUndo();
+  const frame = currentFrame();
+  let aligned = false;
+
+  for (const team of ["a", "b"]) {
+    const count = team === "a" ? state.playerCountA : state.playerCountB;
+    const groups = {};
+    for (let i = 1; i <= count; i++) {
+      const id = `p-${team}${i}`;
+      const label = (state.players[id].label || "").trim();
+      const pos = frame[id];
+      if (!label || !pos) continue;
+      if (!groups[label]) groups[label] = [];
+      groups[label].push(id);
+    }
+    for (const label of Object.keys(groups)) {
+      const ids = groups[label];
+      if (ids.length < 2) continue;
+      const avgX = ids.reduce((sum, id) => sum + frame[id].x, 0) / ids.length;
+      ids.forEach((id) => { frame[id].x = avgX; });
+      aligned = true;
+    }
+  }
+
+  if (!aligned) {
+    alert("同じ役割（ラベル）の選手が2人以上いるチームがありません。選手をタップしてラベル（DF・MFなど）を設定してから試してください。");
+    undoStack.pop();
+    updateUndoUI();
+    return;
+  }
+
+  updateTokenPositions(frame);
+  drawPaths();
+  updateFramesTimeline();
+  scheduleAutosave();
+}
+
 /* ---------- 自作フォーメーション（11人以外の人数用） ---------- */
 function readCustomFormations() {
   try {
@@ -1531,6 +1687,14 @@ function updateToolbarUI() {
     b.classList.toggle("active", b.dataset.theme === state.courtColor);
   });
   $("btn-orientation").classList.toggle("active", state.portrait);
+
+  // 半面コートのときだけ4方向のゴール向きボタンを表示する
+  const isHalf = state.courtType === "half";
+  $("btn-orientation").hidden = isHalf;
+  $("half-facing-group").hidden = !isHalf;
+  document.querySelectorAll("[data-facing]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.facing === state.halfFacing);
+  });
 }
 
 /* ---------- ポインター操作 ---------- */
@@ -1682,8 +1846,9 @@ function onPointerMove(e) {
     const frame = currentFrame();
     const p = frame[drag.id];
     if (!p) return;
+    const maxY = (drag.id !== "ball" && benchActive()) ? H + BENCH_DEPTH : H;
     p.x = clamp(pt.x + drag.grabDX, 0, W);
-    p.y = clamp(pt.y + drag.grabDY, 0, H);
+    p.y = clamp(pt.y + drag.grabDY, 0, maxY);
     if (drag.ballAttach && frame["ball"]) {
       frame["ball"].x = clamp(p.x + drag.ballDX, 0, W);
       frame["ball"].y = clamp(p.y + drag.ballDY, 0, H);
@@ -1780,7 +1945,7 @@ function onPointerUp(e) {
         a.x = clamp(d.start.x - 6, 0, W - 12);
         a.y = clamp(d.start.y - 4.5, 0, H - 9);
       } else if (a.type === "arrow" && dist({ x: a.x1, y: a.y1 }, { x: a.x2, y: a.y2 }) < 2) {
-        if (state.portrait) { a.x2 = a.x1; a.y2 = clamp(a.y1 - 9, 0, H); }
+        if (effectiveOrientation().portrait) { a.x2 = a.x1; a.y2 = clamp(a.y1 - 9, 0, H); }
         else { a.x2 = clamp(a.x1 + 9, 0, W); a.y2 = a.y1; }
       }
       state.tool = "select";
@@ -1863,6 +2028,9 @@ function setupEventListeners() {
   });
   document.querySelectorAll("[data-theme]").forEach((b) => {
     b.addEventListener("click", () => setCourtColor(b.dataset.theme));
+  });
+  document.querySelectorAll("[data-facing]").forEach((b) => {
+    b.addEventListener("click", () => setHalfFacing(b.dataset.facing));
   });
   $("btn-orientation").addEventListener("click", () => {
     state.portrait = !state.portrait;
@@ -1980,6 +2148,10 @@ function setupEventListeners() {
   // 自作フォーメーションの保存
   $("btn-save-formation-a").addEventListener("click", () => saveCustomFormation("a"));
   $("btn-save-formation-b").addEventListener("click", () => saveCustomFormation("b"));
+
+  // チーム入替・ライン整列
+  $("btn-swap-teams").addEventListener("click", swapTeams);
+  $("btn-align-roles").addEventListener("click", alignByRole);
 
   // 保存
   $("btn-save").addEventListener("click", saveCurrentAs);

@@ -40,6 +40,12 @@
           <button data-court="blank" class="court-btn">無地</button>
           <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
         </div>
+        <div class="tool-group" id="half-facing-group" hidden>
+          <button data-facing="left" class="facing-btn active" title="ゴールを左向きに">⬅</button>
+          <button data-facing="up" class="facing-btn" title="ゴールを上向きに">⬆</button>
+          <button data-facing="down" class="facing-btn" title="ゴールを下向きに">⬇</button>
+          <button data-facing="right" class="facing-btn" title="ゴールを右向きに">➡</button>
+        </div>
         <div class="tool-group">
           <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
           <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
@@ -80,6 +86,7 @@
           </defs>
           <g id="scene">
             <g id="layer-pitch"></g>
+            <g id="layer-bench"></g>
             <g id="layer-anno"></g>
             <g id="layer-paths"></g>
             <g id="layer-tokens"></g>
@@ -124,6 +131,10 @@
       <details class="panel" id="panel-team">
         <summary>👥 人数・フォーメーション</summary>
         <div class="panel-body">
+          <div class="btn-group-2">
+            <button id="btn-swap-teams" title="青チームと赤チームの場所をまるごと入れ替えます">⇄ 青と赤を入替</button>
+            <button id="btn-align-roles" title="同じ役割（DF・MFなど）のラベルが付いた選手を横一列に揃えます">📏 ラインを揃える</button>
+          </div>
           <div class="player-count-row">
             <span class="count-label">両チーム同時</span>
             <div class="count-controls">
@@ -214,6 +225,9 @@
             <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
             <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
+            <li>半面コートでは⬅⬆⬇➡ボタンでゴールの向きを選べます。</li>
+            <li>コート下の「ベンチ（控え）」帯に選手をドラッグすると控えにできます（無地コートを除く）。</li>
+            <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」で同じ役割の選手を一列に整列できます（その後は自由に動かせます）。</li>
             <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
           </ul>
         </div>
