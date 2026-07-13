@@ -748,11 +748,15 @@ function getFormationPositions(team, formationName, count) {
 function spawnPos(team, i) {
   const { W, H } = court();
   if (i > 11 && benchActive()) {
-    // 12人目以降は控えエリアへ直接配置する
-    const col = (i - 12) % 8;
-    const row = Math.floor((i - 12) / 8);
-    const x = clamp(W * 0.1 + col * (W * 0.8) / 7, 2, W - 2);
-    const y = H + Math.min(BENCH_DEPTH - benchDragMargin(), 2 + row * 4);
+    // 12人目以降は控えエリアへ直接配置する。チームAとBで行を分けて重ならないようにする
+    const idx = i - 12; // 0..8 (最大9人分: 12〜20人目)
+    const cols = 9;
+    const col = idx % cols;
+    const marginX = W * 0.06;
+    const x = clamp(marginX + (col * (W - marginX * 2)) / (cols - 1), 2, W - 2);
+    const y = team === "a"
+      ? clamp(H + 2, H + 1, H + BENCH_DEPTH - 0.5)
+      : clamp(H + BENCH_DEPTH - benchDragMargin(), H + 1, H + BENCH_DEPTH - 0.5);
     return { x, y };
   }
   const x = team === "b" ? W * 0.28 : W * 0.72;
@@ -834,10 +838,17 @@ function applyFormation(team, formationName) {
   cancelAnim();
   pushUndo();
   const frame = currentFrame();
-  const positions = getFormationPositions(team, formationName);
+  const count = team === "a" ? state.playerCountA : state.playerCountB;
+  const onPitchCount = Math.min(count, 11);
+  const positions = getFormationPositions(team, formationName, onPitchCount);
   for (const key of Object.keys(positions)) {
     frame[key] = { x: positions[key].x, y: positions[key].y };
     state.players[key].label = positions[key].role || "";
+  }
+  // 12人目以降は控えのまま（フォーメーションの対象外）。位置がなければ控えへ補完するだけ
+  for (let i = 12; i <= count; i++) {
+    const key = `p-${team}${i}`;
+    if (!frame[key]) frame[key] = spawnPos(team, i);
   }
   buildTokens();
   animateToFrame(state.currentFrameIndex, 350, () => {
@@ -1249,13 +1260,21 @@ function splitByRatio(total, ratios) {
 }
 
 /* 人数変更のたびに、GK/DF/MF/FWのラベルが付いている（＝固有名を付けていない）選手だけを対象に、
-   FW:MF:DF = 1:2:1（＋GK1人）の比率でラベルを貼り直す。固有名を付けた選手は対象外＝一切変更しない。 */
+   FW:MF:DF = 1:2:1（＋GK1人）の比率でラベルを貼り直す。固有名を付けた選手は対象外＝一切変更しない。
+   12人目以降は控えエリアに直接入るポジション未定の選手なので、ラベル付け対象からも外す。 */
 function reassignRoleLabels(team, count) {
+  const onPitchCount = Math.min(count, 11);
   const eligible = [];
-  for (let i = 1; i <= count; i++) {
+  for (let i = 1; i <= onPitchCount; i++) {
     const id = `p-${team}${i}`;
     const label = (state.players[id].label || "").trim();
     if (label === "" || POSITION_LABELS.has(label)) eligible.push(id);
+  }
+  // 12人目以降はラベルを付けない（既にGK/DF/MF/FWが付いていたら念のためクリアする）
+  for (let i = 12; i <= count; i++) {
+    const id = `p-${team}${i}`;
+    const label = (state.players[id].label || "").trim();
+    if (POSITION_LABELS.has(label)) state.players[id].label = "";
   }
   if (eligible.length === 0) return;
 
@@ -1398,9 +1417,25 @@ function swapTeams() {
    選手の固有名（それ以外の文字列）は対象外にし、貼り替え・整列のどちらでも触らない。 */
 const POSITION_LABELS = new Set(["GK", "DF", "MF", "FW"]);
 
-/* ---------- 同じ役割ラベルの選手を横一列に整列（一度きりのスナップ、以後は自由に動かせる） ----------
-   基準: GK/DF/MF/FW のいずれかのラベルが付いたコート上の選手をチームごとにグループ化し、
-   そのグループのX座標（コートの奥行き方向）の平均値に全員のXを揃える。
+/* X座標でソートし、最も大きい隙間のところで2つのクラスタに分割する。
+   4人以下ならそのまま1グループ（1列）として返す。5人以上のときは、既存の
+   自ゴール側グループ/前目グループの分かれ方（M型・W型）をそのまま2列として活かす。 */
+function splitIntoDepthClusters(ids, frame) {
+  const sorted = ids.slice().sort((a, b) => frame[a].x - frame[b].x);
+  if (sorted.length <= 4) return [sorted];
+  let maxGap = -1, splitAt = 1;
+  for (let i = 1; i < sorted.length; i++) {
+    const gap = frame[sorted[i]].x - frame[sorted[i - 1]].x;
+    if (gap > maxGap) { maxGap = gap; splitAt = i; }
+  }
+  return [sorted.slice(0, splitAt), sorted.slice(splitAt)];
+}
+
+/* ---------- 同じ役割ラベルの選手を整列（一度きりのスナップ、以後は自由に動かせる） ----------
+   基準: GK/DF/MF/FW のいずれかのラベルが付いたコート上の選手をチームごとにグループ化する。
+   4人以下ならX座標（コートの奥行き方向）の平均値に全員のXを揃えて1列にする。
+   5人以上のときは、現在のX座標の一番大きい隙間のところで2つに分け、それぞれの平均Xに揃える
+   （3-5-2のMFのような「M型・W型」の分かれ方を保ったまま整列する）。
    Y座標（横方向の広がり）は基本的にそのまま活かすが、近すぎて重なりそうな場合だけ均等に広げ直す。
    控えエリアの選手はこのグループ化から除外し、代わりに控えエリア内で重ならないよう一列に並べ直す。
    選手の固有名（GK/DF/MF/FW以外の文字列）が付いた選手は対象外（動かさない）。 */
@@ -1430,17 +1465,23 @@ function alignByRole() {
       const ids = groups[label];
       if (ids.length < 2) continue;
 
-      const avgX = ids.reduce((sum, id) => sum + frame[id].x, 0) / ids.length;
-      ids.forEach((id) => { frame[id].x = avgX; });
+      const clusters = splitIntoDepthClusters(ids, frame);
+      for (const cluster of clusters) {
+        if (cluster.length < 1) continue;
+        const avgX = cluster.reduce((sum, id) => sum + frame[id].x, 0) / cluster.length;
+        cluster.forEach((id) => { frame[id].x = avgX; });
 
-      // Y方向が近すぎて重なりそうな場合は、現在の中心を保ったまま均等に広げ直す
-      const sorted = ids.slice().sort((idA, idB) => frame[idA].y - frame[idB].y);
-      const neededSpan = minGap * (sorted.length - 1);
-      const currentSpan = frame[sorted[sorted.length - 1]].y - frame[sorted[0]].y;
-      if (currentSpan < neededSpan) {
-        const centerY = sorted.reduce((sum, id) => sum + frame[id].y, 0) / sorted.length;
-        const startY = clamp(centerY - neededSpan / 2, 0, Math.max(0, H - neededSpan));
-        sorted.forEach((id, idx) => { frame[id].y = startY + idx * minGap; });
+        // Y方向が近すぎて重なりそうな場合は、現在の中心を保ったまま均等に広げ直す
+        if (cluster.length >= 2) {
+          const sorted = cluster.slice().sort((idA, idB) => frame[idA].y - frame[idB].y);
+          const neededSpan = minGap * (sorted.length - 1);
+          const currentSpan = frame[sorted[sorted.length - 1]].y - frame[sorted[0]].y;
+          if (currentSpan < neededSpan) {
+            const centerY = sorted.reduce((sum, id) => sum + frame[id].y, 0) / sorted.length;
+            const startY = clamp(centerY - neededSpan / 2, 0, Math.max(0, H - neededSpan));
+            sorted.forEach((id, idx) => { frame[id].y = startY + idx * minGap; });
+          }
+        }
       }
       aligned = true;
     }
@@ -1603,10 +1644,10 @@ function updateFormationPanels() {
     if (!section) continue;
     section.hidden = count === 0;
     if (count === 0) continue;
-    const is11 = count === 11;
-    $(`formation-presets-${team}`).hidden = !is11;
-    $(`formation-custom-${team}`).hidden = is11;
-    if (!is11) renderCustomFormationList(team);
+    const showPresets = count >= 11; // 11人以上ならプリセット（12人目以降は控えへ）
+    $(`formation-presets-${team}`).hidden = !showPresets;
+    $(`formation-custom-${team}`).hidden = showPresets;
+    if (!showPresets) renderCustomFormationList(team);
   }
 }
 
