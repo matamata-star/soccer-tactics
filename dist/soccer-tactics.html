@@ -282,17 +282,18 @@ const COURT_THEMES = {
 /* ---------- フォーメーション定義（フルコート基準の%座標） ---------- */
 const formations = {
   "4-4-2": {
+    // 定番の「フラット4-4-2」: 守備ライン4人・中盤ライン4人ともほぼ横一線に並べる
     1:  { x: 5,  y: 50, role: "GK" },
-    2:  { x: 22, y: 18, role: "DF" },
+    2:  { x: 20, y: 15, role: "DF" },
     3:  { x: 20, y: 38, role: "DF" },
     4:  { x: 20, y: 62, role: "DF" },
-    5:  { x: 22, y: 82, role: "DF" },
-    6:  { x: 36, y: 30, role: "MF" },
-    7:  { x: 36, y: 50, role: "MF" },
-    8:  { x: 36, y: 70, role: "MF" },
-    9:  { x: 44, y: 15, role: "MF" },
-    10: { x: 44, y: 35, role: "FW" },
-    11: { x: 44, y: 65, role: "FW" },
+    5:  { x: 20, y: 85, role: "DF" },
+    6:  { x: 36, y: 15, role: "MF" },
+    7:  { x: 36, y: 38, role: "MF" },
+    8:  { x: 36, y: 62, role: "MF" },
+    9:  { x: 36, y: 85, role: "MF" },
+    10: { x: 46, y: 35, role: "FW" },
+    11: { x: 46, y: 65, role: "FW" },
   },
   "4-3-3": {
     1:  { x: 5,  y: 50, role: "GK" },
@@ -308,17 +309,17 @@ const formations = {
     11: { x: 46, y: 85, role: "FW" },
   },
   "3-5-2": {
-    // MFの5人は1列に並べず、自ゴール側(x低め)に3人・前目(x高め)に2人の「M字」に配置する
+    // 3バックはフラットに、MFの5人は1列に並べず、自ゴール側(x低め)に3人・前目(x高め)に2人の「M字」に配置する
     // （左右の2人＝ウイングバックが前へ、中央3人＝アンカー役が控えめに構える形）
     1:  { x: 5,  y: 50, role: "GK" },
-    2:  { x: 20, y: 28, role: "DF" },
-    3:  { x: 18, y: 50, role: "DF" },
-    4:  { x: 20, y: 72, role: "DF" },
-    5:  { x: 40, y: 10, role: "MF" },
+    2:  { x: 20, y: 22, role: "DF" },
+    3:  { x: 20, y: 50, role: "DF" },
+    4:  { x: 20, y: 78, role: "DF" },
+    5:  { x: 40, y: 8,  role: "MF" },
     6:  { x: 29, y: 30, role: "MF" },
     7:  { x: 29, y: 50, role: "MF" },
     8:  { x: 29, y: 70, role: "MF" },
-    9:  { x: 40, y: 90, role: "MF" },
+    9:  { x: 40, y: 92, role: "MF" },
     10: { x: 46, y: 35, role: "FW" },
     11: { x: 46, y: 65, role: "FW" },
   }
@@ -1024,13 +1025,19 @@ function createDefaultFrame(applyLabels) {
     const pos = getFormationPositions(team, "4-4-2", onPitchCount);
     for (const key of Object.keys(pos)) {
       frame[key] = { x: pos[key].x, y: pos[key].y };
-      if (applyLabels) state.players[key].label = pos[key].role || "";
     }
     // 12人目以降は控えエリアへ（フォーメーションの定義がないため）
     for (let i = 12; i <= count; i++) {
-      const key = `p-${team}${i}`;
-      frame[key] = spawnPos(team, i);
-      if (applyLabels) state.players[key].label = "";
+      frame[`p-${team}${i}`] = spawnPos(team, i);
+    }
+    if (applyLabels) {
+      if (onPitchCount === 11) {
+        // 11人ちょうどは4-4-2本来の役割構成（GK1/DF4/MF4/FW2）をそのまま使う
+        for (const key of Object.keys(pos)) state.players[key].label = pos[key].role || "";
+      } else {
+        // 11人未満は簡易配置には決まった役割比率がないので、FW:MF:DF=1:2:1で付与する
+        reassignRoleLabels(team, count);
+      }
     }
   }
   frame["ball"] = { x: W / 2, y: H / 2 };
@@ -1059,7 +1066,13 @@ function createHalfDefaultFrame() {
     const b = basePositions[i];
     const xPct = clamp(remapX(b.x), 2, 98);
     frame[key] = { x: (xPct / 100) * W, y: (b.y / 100) * H };
-    state.players[key].label = b.role || "";
+  }
+  if (onPitchCount === 11) {
+    // 11人ちょうどは4-4-2本来の役割構成をそのまま使う
+    for (let i = 0; i < onPitchCount; i++) state.players[`p-a${i + 1}`].label = basePositions[i].role || "";
+  } else {
+    // 11人未満はFW:MF:DF=1:2:1の比率で付与する
+    reassignRoleLabels("a", count);
   }
   // 12人目以降は控えエリアへ
   for (let i = 12; i <= count; i++) {
