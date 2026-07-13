@@ -57,15 +57,17 @@ const formations = {
     11: { x: 46, y: 85, role: "FW" },
   },
   "3-5-2": {
+    // MFの5人は1列に並べず、自ゴール側(x低め)に3人・前目(x高め)に2人の「M字」に配置する
+    // （左右の2人＝ウイングバックが前へ、中央3人＝アンカー役が控えめに構える形）
     1:  { x: 5,  y: 50, role: "GK" },
     2:  { x: 20, y: 28, role: "DF" },
     3:  { x: 18, y: 50, role: "DF" },
     4:  { x: 20, y: 72, role: "DF" },
-    5:  { x: 32, y: 12, role: "MF" },
-    6:  { x: 36, y: 30, role: "MF" },
-    7:  { x: 36, y: 50, role: "MF" },
-    8:  { x: 36, y: 70, role: "MF" },
-    9:  { x: 32, y: 88, role: "MF" },
+    5:  { x: 40, y: 10, role: "MF" },
+    6:  { x: 29, y: 30, role: "MF" },
+    7:  { x: 29, y: 50, role: "MF" },
+    8:  { x: 29, y: 70, role: "MF" },
+    9:  { x: 40, y: 90, role: "MF" },
     10: { x: 46, y: 35, role: "FW" },
     11: { x: 46, y: 65, role: "FW" },
   }
@@ -233,14 +235,15 @@ function clientToLogical(cx, cy) {
   return { x: p.x, y: p.y };
 }
 
-/* 半面コートは4方向のゴール向き、フル/無地コートは従来の縦横トグルを使う */
+/* 半面コートは4方向の「攻撃方向」（自陣ゴールの向きではなく、攻める方向）を指定する。
+   ゴール（自陣・防御側）は攻撃方向の反対側に描画される。フル/無地コートは従来の縦横トグルを使う */
 function halfFacingToOrientation(facing) {
   switch (facing) {
-    case "right": return { portrait: false, flip: true };
-    case "up":    return { portrait: true, flip: false };
-    case "down":  return { portrait: true, flip: true };
-    case "left":
-    default:      return { portrait: false, flip: false };
+    case "left":  return { portrait: false, flip: true };  // 左へ攻める（ゴールは右）
+    case "down":  return { portrait: true, flip: false };  // 下へ攻める（ゴールは上）
+    case "up":    return { portrait: true, flip: true };   // 上へ攻める（ゴールは下）
+    case "right":
+    default:      return { portrait: false, flip: false }; // 右へ攻める（ゴールは左）
   }
 }
 
@@ -320,15 +323,17 @@ function renderBench() {
     stroke: "rgba(255,255,255,0.3)", "stroke-width": 0.3, "stroke-dasharray": "1.4 1.2",
   }, L);
 
-  // ラベルはシーンの回転・反転を打ち消して常に正しい向きで表示する
-  const fs = Math.min(3.4, BENCH_DEPTH * 0.26);
-  const anchor = el("g", { transform: `translate(${1} ${y0 + BENCH_DEPTH / 2})` }, L);
+  // ラベルはシーンの回転・反転を打ち消して常に正しい向きで表示し、
+  // 帯の奥行き(BENCH_DEPTH)に収まるよう中央揃え・小さめのフォントにする
+  const fs = Math.min(2.2, BENCH_DEPTH * 0.19);
+  const anchor = el("g", { transform: `translate(${W / 2} ${y0 + BENCH_DEPTH / 2})` }, L);
   const inner = el("g", { transform: counterTransformFor() }, anchor);
   const label = el("text", {
-    x: 0, y: 0, "font-size": fs, "font-weight": 700, "dominant-baseline": "central",
-    fill: "rgba(255,255,255,0.6)",
+    x: 0, y: 0, "font-size": fs, "font-weight": 700,
+    "text-anchor": "middle", "dominant-baseline": "central",
+    fill: "rgba(255,255,255,0.55)",
   }, inner);
-  label.textContent = "控えエリア";
+  label.textContent = "控え";
 }
 
 /* ---------- ピッチ描画 ---------- */
@@ -566,7 +571,7 @@ function clearAnnotations() {
 /* ---------- 選手・ボール（トークン） ---------- */
 function ensurePlayers() {
   for (const team of ["a", "b"]) {
-    for (let i = 1; i <= 11; i++) {
+    for (let i = 1; i <= 20; i++) {
       const key = `p-${team}${i}`;
       if (!state.players[key]) state.players[key] = { team, num: String(i), label: "" };
     }
@@ -722,7 +727,7 @@ function getFormationPositions(team, formationName, count) {
     basePositions = [];
     for (let i = 1; i <= 11; i++) basePositions.push(f[i]);
   } else {
-    basePositions = simpleFormations[useCount];
+    basePositions = simpleFormations[useCount] || simpleFormations[8];
   }
   const positions = {};
   for (let i = 0; i < useCount; i++) {
@@ -742,6 +747,14 @@ function getFormationPositions(team, formationName, count) {
 
 function spawnPos(team, i) {
   const { W, H } = court();
+  if (i > 11 && benchActive()) {
+    // 12人目以降は控えエリアへ直接配置する
+    const col = (i - 12) % 8;
+    const row = Math.floor((i - 12) / 8);
+    const x = clamp(W * 0.1 + col * (W * 0.8) / 7, 2, W - 2);
+    const y = H + Math.min(BENCH_DEPTH - benchDragMargin(), 2 + row * 4);
+    return { x, y };
+  }
   const x = team === "b" ? W * 0.28 : W * 0.72;
   const y = clamp(H / 2 + (i - 6) * 4, 2, H - 2);
   return { x, y };
@@ -752,10 +765,17 @@ function createDefaultFrame(applyLabels) {
   const frame = {};
   for (const team of ["a", "b"]) {
     const count = team === "a" ? state.playerCountA : state.playerCountB;
-    const pos = getFormationPositions(team, "4-4-2", count);
+    const onPitchCount = Math.min(count, 11);
+    const pos = getFormationPositions(team, "4-4-2", onPitchCount);
     for (const key of Object.keys(pos)) {
       frame[key] = { x: pos[key].x, y: pos[key].y };
       if (applyLabels) state.players[key].label = pos[key].role || "";
+    }
+    // 12人目以降は控えエリアへ（フォーメーションの定義がないため）
+    for (let i = 12; i <= count; i++) {
+      const key = `p-${team}${i}`;
+      frame[key] = spawnPos(team, i);
+      if (applyLabels) state.players[key].label = "";
     }
   }
   frame["ball"] = { x: W / 2, y: H / 2 };
@@ -767,23 +787,30 @@ function createDefaultFrame(applyLabels) {
 function createHalfDefaultFrame() {
   const { W, H } = court();
   const frame = {};
-  const count = clamp(state.playerCountA || 8, 1, 11);
+  const count = clamp(state.playerCountA || 8, 1, 20);
+  const onPitchCount = Math.min(count, 11);
   let basePositions;
-  if (count === 11) {
+  if (onPitchCount === 11) {
     const f = formations["4-4-2"];
     basePositions = [];
     for (let i = 1; i <= 11; i++) basePositions.push(f[i]);
   } else {
-    basePositions = simpleFormations[count];
+    basePositions = simpleFormations[onPitchCount];
   }
   // 通常フォーメーションのx範囲（およそ5〜46%）をハーフコート全体（8〜92%）へ引き伸ばす
   const remapX = (x) => 8 + ((x - 5) / (46 - 5)) * (92 - 8);
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < onPitchCount; i++) {
     const key = `p-a${i + 1}`;
     const b = basePositions[i];
     const xPct = clamp(remapX(b.x), 2, 98);
     frame[key] = { x: (xPct / 100) * W, y: (b.y / 100) * H };
     state.players[key].label = b.role || "";
+  }
+  // 12人目以降は控えエリアへ
+  for (let i = 12; i <= count; i++) {
+    const key = `p-a${i}`;
+    frame[key] = spawnPos("a", i);
+    state.players[key].label = "";
   }
   frame["ball"] = { x: W, y: H / 2 }; // ハーフウェーライン中央＝センターサークル位置
   return frame;
@@ -1008,8 +1035,8 @@ function loadDoc(doc) {
   state.halfFacing = ["left", "right", "up", "down"].includes(doc.halfFacing) ? doc.halfFacing : "left";
   const aRaw = parseInt(doc.playerCountA, 10);
   const bRaw = parseInt(doc.playerCountB, 10);
-  state.playerCountA = clamp(Number.isFinite(aRaw) ? aRaw : 8, 1, 11);
-  state.playerCountB = clamp(Number.isFinite(bRaw) ? bRaw : 8, 0, 11);
+  state.playerCountA = clamp(Number.isFinite(aRaw) ? aRaw : 8, 1, 20);
+  state.playerCountB = clamp(Number.isFinite(bRaw) ? bRaw : 8, 0, 20);
 
   state.players = {};
   ensurePlayers();
@@ -1210,15 +1237,52 @@ function importFromFile(file) {
   reader.readAsText(file);
 }
 
+/* 比率(ratios)に従ってtotalを整数配分する（最大剰余法で端数を配分） */
+function splitByRatio(total, ratios) {
+  const sum = ratios.reduce((a, b) => a + b, 0);
+  const raw = ratios.map((r) => (total * r) / sum);
+  const floors = raw.map(Math.floor);
+  let remainder = total - floors.reduce((a, b) => a + b, 0);
+  const order = raw.map((v, i) => ({ i, frac: v - floors[i] })).sort((a, b) => b.frac - a.frac);
+  for (let k = 0; k < remainder; k++) floors[order[k].i]++;
+  return floors;
+}
+
+/* 人数変更のたびに、GK/DF/MF/FWのラベルが付いている（＝固有名を付けていない）選手だけを対象に、
+   FW:MF:DF = 1:2:1（＋GK1人）の比率でラベルを貼り直す。固有名を付けた選手は対象外＝一切変更しない。 */
+function reassignRoleLabels(team, count) {
+  const eligible = [];
+  for (let i = 1; i <= count; i++) {
+    const id = `p-${team}${i}`;
+    const label = (state.players[id].label || "").trim();
+    if (label === "" || POSITION_LABELS.has(label)) eligible.push(id);
+  }
+  if (eligible.length === 0) return;
+
+  const roles = [];
+  if (eligible.length === 1) {
+    roles.push("");
+  } else {
+    roles.push("GK");
+    const [df, mf, fw] = splitByRatio(eligible.length - 1, [1, 2, 1]); // DF:MF:FW = 1:2:1
+    for (let k = 0; k < df; k++) roles.push("DF");
+    for (let k = 0; k < mf; k++) roles.push("MF");
+    for (let k = 0; k < fw; k++) roles.push("FW");
+  }
+  eligible.forEach((id, idx) => { state.players[id].label = roles[idx] || ""; });
+}
+
 /* ---------- 人数変更 ---------- */
 function setPlayerCount(team, count, skipUndo) {
   const min = team === "b" ? 0 : 1; // チームBは相手なし（0人）にもできる
-  const newCount = clamp(count, min, 11);
+  const newCount = clamp(count, min, 20);
   const old = team === "a" ? state.playerCountA : state.playerCountB;
   if (newCount === old) return;
   if (!skipUndo) pushUndo();
   if (team === "a") state.playerCountA = newCount;
   else state.playerCountB = newCount;
+
+  reassignRoleLabels(team, newCount);
 
   // 増えた選手の座標を「全コマ」に補完する
   state.frames.forEach(ensureFrameCompleteness);
@@ -1306,7 +1370,7 @@ function swapTeams() {
   state.playerCountA = state.playerCountB;
   state.playerCountB = tmpCount;
 
-  for (let i = 1; i <= 11; i++) {
+  for (let i = 1; i <= 20; i++) {
     const aKey = `p-a${i}`, bKey = `p-b${i}`;
     const aMeta = state.players[aKey], bMeta = state.players[bKey];
     const tmpMeta = { num: aMeta.num, label: aMeta.label };
@@ -1330,28 +1394,38 @@ function swapTeams() {
   scheduleAutosave();
 }
 
+/* 「ラインを揃える」の対象として認識するポジション名。
+   選手の固有名（それ以外の文字列）は対象外にし、貼り替え・整列のどちらでも触らない。 */
+const POSITION_LABELS = new Set(["GK", "DF", "MF", "FW"]);
+
 /* ---------- 同じ役割ラベルの選手を横一列に整列（一度きりのスナップ、以後は自由に動かせる） ----------
-   基準: 同じラベル（DF・MFなど）が付いた選手をチームごとにグループ化し、
+   基準: GK/DF/MF/FW のいずれかのラベルが付いたコート上の選手をチームごとにグループ化し、
    そのグループのX座標（コートの奥行き方向）の平均値に全員のXを揃える。
-   Y座標（横方向の広がり）は基本的にそのまま活かすが、近すぎて重なりそうな場合だけ均等に広げ直す。 */
+   Y座標（横方向の広がり）は基本的にそのまま活かすが、近すぎて重なりそうな場合だけ均等に広げ直す。
+   控えエリアの選手はこのグループ化から除外し、代わりに控えエリア内で重ならないよう一列に並べ直す。
+   選手の固有名（GK/DF/MF/FW以外の文字列）が付いた選手は対象外（動かさない）。 */
 function alignByRole() {
   pushUndo();
   const frame = currentFrame();
-  const { H } = court();
+  const { W, H } = court();
   const minGap = Math.max(4, markerR() * 2.4);
   let aligned = false;
 
   for (const team of ["a", "b"]) {
     const count = team === "a" ? state.playerCountA : state.playerCountB;
     const groups = {};
+    const benchedIds = [];
     for (let i = 1; i <= count; i++) {
       const id = `p-${team}${i}`;
       const label = (state.players[id].label || "").trim();
       const pos = frame[id];
-      if (!label || !pos) continue;
+      if (!pos) continue;
+      if (pos.y > H) { benchedIds.push(id); continue; } // 控えエリアの選手はコート上の整列に含めない
+      if (!POSITION_LABELS.has(label)) continue; // 固有名（ポジション名以外）は対象外
       if (!groups[label]) groups[label] = [];
       groups[label].push(id);
     }
+
     for (const label of Object.keys(groups)) {
       const ids = groups[label];
       if (ids.length < 2) continue;
@@ -1370,10 +1444,21 @@ function alignByRole() {
       }
       aligned = true;
     }
+
+    // 控えエリアの選手は、役割に関係なく控えエリア内で重ならない一列に並べ直す
+    if (benchedIds.length >= 2) {
+      const sorted = benchedIds.slice().sort((idA, idB) => frame[idA].x - frame[idB].x);
+      const neededSpan = minGap * (sorted.length - 1);
+      const centerX = sorted.reduce((sum, id) => sum + frame[id].x, 0) / sorted.length;
+      const startX = clamp(centerX - neededSpan / 2, 0, Math.max(0, W - neededSpan));
+      const benchY = H + BENCH_DEPTH / 2;
+      sorted.forEach((id, idx) => { frame[id].x = startX + idx * minGap; frame[id].y = benchY; });
+      aligned = true;
+    }
   }
 
   if (!aligned) {
-    alert("同じ役割（ラベル）の選手が2人以上いるチームがありません。選手をタップしてラベル（DF・MFなど）を設定してから試してください。");
+    alert("整列できる選手がいません（GK・DF・MF・FWのラベルが付いた選手が同じチームに2人以上、または控えエリアに2人以上いる場合に整列できます）。");
     undoStack.pop();
     updateUndoUI();
     return;
@@ -1947,12 +2032,19 @@ function setupEventListeners() {
     stopPlayback(); cancelAnim();
     if (!confirm("全コマをクリアして初期配置に戻しますか？（図形は残ります）")) return;
     pushUndo();
-    state.frames = [createDefaultFrame(true)];
+    if (state.courtType === "half") {
+      state.playerCountB = 0;
+      state.frames = [createHalfDefaultFrame()];
+    } else {
+      state.frames = [createDefaultFrame(true)];
+    }
     state.currentFrameIndex = 0;
     buildTokens();
     updateTokenPositions(currentFrame());
     drawPaths();
     updateFramesTimeline();
+    syncCountsUI();
+    updateFormationPanels();
     scheduleAutosave();
   });
 
@@ -1986,7 +2078,7 @@ function setupEventListeners() {
 
   // 人数（両チーム同時はアンドゥ1回分にまとめる）
   $("btn-both-inc").addEventListener("click", () => {
-    if (state.playerCountA >= 11 && state.playerCountB >= 11) return;
+    if (state.playerCountA >= 20 && state.playerCountB >= 20) return;
     pushUndo();
     if (state.playerCountA === state.playerCountB) {
       setPlayerCount("a", state.playerCountA + 1, true);

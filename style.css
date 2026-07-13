@@ -362,7 +362,8 @@ details.panel[open] summary::after {
 
 .formation-section[hidden],
 .formation-custom[hidden],
-.btn-group[hidden] {
+.btn-group[hidden],
+.tool-group[hidden] {
   display: none;
 }
 

@@ -41,10 +41,10 @@
           <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
         </div>
         <div class="tool-group" id="half-facing-group" hidden>
-          <button data-facing="left" class="facing-btn active" title="ゴールを左向きに">⬅</button>
-          <button data-facing="up" class="facing-btn" title="ゴールを上向きに">⬆</button>
-          <button data-facing="down" class="facing-btn" title="ゴールを下向きに">⬇</button>
-          <button data-facing="right" class="facing-btn" title="ゴールを右向きに">➡</button>
+          <button data-facing="left" class="facing-btn active" title="左へ攻める（ゴールは右）">⬅</button>
+          <button data-facing="up" class="facing-btn" title="上へ攻める（ゴールは下）">⬆</button>
+          <button data-facing="down" class="facing-btn" title="下へ攻める（ゴールは上）">⬇</button>
+          <button data-facing="right" class="facing-btn" title="右へ攻める（ゴールは左）">➡</button>
         </div>
         <div class="tool-group">
           <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
@@ -227,10 +227,11 @@
             <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
             <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
-            <li>半面コートでは⬅⬆⬇➡ボタンでゴールの向きを選べます。</li>
-            <li>コート下の「控えエリア」に選手をドラッグすると控えにできます（無地コートを除く）。</li>
-            <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」で同じ役割の選手を一列に整列できます（その後は自由に動かせます）。</li>
-            <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
+            <li>半面コートでは⬅⬆⬇➡ボタンで「攻める方向」を選べます（自陣ゴールは反対側に表示されます）。</li>
+            <li>コート下の「控え」エリアに選手をドラッグすると控えにできます（無地コートを除く）。人数は最大20人まで増やせ、12人目以降は自動で控えに入ります。</li>
+            <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」でGK/DF/MF/FWのラベルが付いた選手を一列に整列できます（控えの選手は控え内で整列。固有名を付けた選手は対象外です）。</li>
+            <li>人数を増減すると、GK/DF/MF/FWのラベルがFW:MF:DF=1:2:1の比率で自動的に貼り直されます（固有名を付けた選手は変更されません）。</li>
+            <li>作った作戦は「保存・読み込み」から名前を付けて残せます。同じ名前で保存すると「編集中」表示が出て、以後は「上書き保存」ボタンで素早く更新できます。</li>
           </ul>
         </div>
       </details>
