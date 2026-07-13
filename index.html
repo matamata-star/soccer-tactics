@@ -199,10 +199,12 @@
       <details class="panel" id="panel-save">
         <summary>💾 保存・読み込み</summary>
         <div class="panel-body">
+          <div id="active-save-indicator" class="note" hidden>編集中: <strong id="active-save-name"></strong></div>
           <div class="save-row">
             <input id="save-name" placeholder="名前（例: ロンド4対2）" maxlength="30">
             <button id="btn-save" class="primary">保存</button>
           </div>
+          <button id="btn-overwrite-save" hidden>💾 上書き保存</button>
           <div id="saves-list" class="saves-list"></div>
           <div class="btn-group-2">
             <button id="btn-export">📤 ファイルに書き出し</button>
@@ -226,7 +228,7 @@
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
             <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
             <li>半面コートでは⬅⬆⬇➡ボタンでゴールの向きを選べます。</li>
-            <li>コート下の「ベンチ（控え）」帯に選手をドラッグすると控えにできます（無地コートを除く）。</li>
+            <li>コート下の「控えエリア」に選手をドラッグすると控えにできます（無地コートを除く）。</li>
             <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」で同じ役割の選手を一列に整列できます（その後は自由に動かせます）。</li>
             <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
           </ul>

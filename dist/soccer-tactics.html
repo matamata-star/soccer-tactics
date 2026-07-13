@@ -196,10 +196,12 @@
       <details class="panel" id="panel-save">
         <summary>💾 保存・読み込み</summary>
         <div class="panel-body">
+          <div id="active-save-indicator" class="note" hidden>編集中: <strong id="active-save-name"></strong></div>
           <div class="save-row">
             <input id="save-name" placeholder="名前（例: ロンド4対2）" maxlength="30">
             <button id="btn-save" class="primary">保存</button>
           </div>
+          <button id="btn-overwrite-save" hidden>💾 上書き保存</button>
           <div id="saves-list" class="saves-list"></div>
           <div class="btn-group-2">
             <button id="btn-export">📤 ファイルに書き出し</button>
@@ -223,7 +225,7 @@
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
             <li>11人以外の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます。</li>
             <li>半面コートでは⬅⬆⬇➡ボタンでゴールの向きを選べます。</li>
-            <li>コート下の「ベンチ（控え）」帯に選手をドラッグすると控えにできます（無地コートを除く）。</li>
+            <li>コート下の「控えエリア」に選手をドラッグすると控えにできます（無地コートを除く）。</li>
             <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」で同じ役割の選手を一列に整列できます（その後は自由に動かせます）。</li>
             <li>作った作戦は「保存・読み込み」から名前を付けて残せます。</li>
           </ul>
@@ -418,6 +420,7 @@ const state = {
   speed: 1.0,
   showPaths: true,
   loopPlayback: false,
+  activeSaveName: null, // 直近に開いた/保存した名前付き作戦（上書き保存の対象）
 };
 
 let undoStack = [];
@@ -500,6 +503,21 @@ function benchActive() {
   return state.courtType !== "blank";
 }
 
+/* シーン全体の回転・反転を打ち消す変換文字列（番号・ラベル・ベンチ表記を正しい向きに保つ） */
+function counterTransformFor(orientation) {
+  const { portrait, flip } = orientation || effectiveOrientation();
+  return flip
+    ? (portrait ? "scale(-1,1) rotate(-90)" : "scale(-1,1)")
+    : (portrait ? "rotate(-90)" : null);
+}
+
+/* 控えエリアの奥行きのうち、選手を安全にドラッグできる範囲（マーカー半径＋ラベル分の余白を除く） */
+function benchDragMargin() {
+  const R = markerR();
+  const fs = Math.max(1.6, R * 0.62);
+  return R + fs * 1.6;
+}
+
 /* ---------- ビューボックス / 向き ---------- */
 function applyViewBox() {
   const { W, H } = court();
@@ -535,24 +553,32 @@ function applyViewBox() {
   if (w < availW) svg.style.width = `${Math.round(w)}px`;
 }
 
-/* ---------- 控え選手ベンチ帯（将棋の駒台のような、コート外の待機スペース） ---------- */
+/* ---------- 控えエリア（将棋の駒台のような、コート外の待機スペース） ---------- */
 function renderBench() {
   const L = layers.bench;
   L.innerHTML = "";
   if (!benchActive()) return;
   const { W, H } = court();
+  const theme = COURT_THEMES[state.courtColor] || COURT_THEMES.vivid;
   const y0 = H;
-  el("rect", { x: -PAD, y: y0, width: W + PAD * 2, height: BENCH_DEPTH, fill: "rgba(8,12,18,0.55)" }, L);
+
+  // コートと同系色で塗ってから少し暗くし、プレー面とは区別しつつ一体感を持たせる
+  el("rect", { x: -PAD, y: y0, width: W + PAD * 2, height: BENCH_DEPTH, fill: theme.bg }, L);
+  el("rect", { x: -PAD, y: y0, width: W + PAD * 2, height: BENCH_DEPTH, fill: "rgba(0,0,0,0.4)" }, L);
   el("line", {
     x1: -PAD, y1: y0, x2: W + PAD, y2: y0,
     stroke: "rgba(255,255,255,0.3)", "stroke-width": 0.3, "stroke-dasharray": "1.4 1.2",
   }, L);
+
+  // ラベルはシーンの回転・反転を打ち消して常に正しい向きで表示する
   const fs = Math.min(3.4, BENCH_DEPTH * 0.26);
+  const anchor = el("g", { transform: `translate(${1} ${y0 + BENCH_DEPTH / 2})` }, L);
+  const inner = el("g", { transform: counterTransformFor() }, anchor);
   const label = el("text", {
-    x: 1, y: y0 + fs * 1.15, "font-size": fs, "font-weight": 700,
-    fill: "rgba(255,255,255,0.55)",
-  }, L);
-  label.textContent = "ベンチ（控え）";
+    x: 0, y: 0, "font-size": fs, "font-weight": 700, "dominant-baseline": "central",
+    fill: "rgba(255,255,255,0.6)",
+  }, inner);
+  label.textContent = "控えエリア";
 }
 
 /* ---------- ピッチ描画 ---------- */
@@ -855,11 +881,7 @@ function buildTokens() {
   const rb = ballR();
   const ppm = pxPerMeter();
   const hitPad = Math.max(0.8, 8 / ppm);
-  const { portrait, flip } = effectiveOrientation();
-  // シーン全体の回転・反転を打ち消して、番号やボール柄が正しい向きで見えるようにする
-  const counterRot = flip
-    ? (portrait ? "scale(-1,1) rotate(-90)" : "scale(-1,1)")
-    : (portrait ? "rotate(-90)" : null);
+  const counterRot = counterTransformFor();
 
   for (const id of activeIds()) {
     const meta = state.players[id];
@@ -959,7 +981,8 @@ function getFormationPositions(team, formationName, count) {
     const xm = (b.x / 100) * W;
     const ym = (b.y / 100) * H;
     positions[key] = {
-      x: team === "a" ? xm : W - xm,
+      // チームA(青)が既定で「高いx」側＝縦画面で下・横画面で右に来るようにする
+      x: team === "b" ? xm : W - xm,
       y: ym,
       role: b.role,
     };
@@ -969,7 +992,7 @@ function getFormationPositions(team, formationName, count) {
 
 function spawnPos(team, i) {
   const { W, H } = court();
-  const x = team === "a" ? W * 0.28 : W * 0.72;
+  const x = team === "b" ? W * 0.28 : W * 0.72;
   const y = clamp(H / 2 + (i - 6) * 4, 2, H - 2);
   return { x, y };
 }
@@ -986,6 +1009,33 @@ function createDefaultFrame(applyLabels) {
     }
   }
   frame["ball"] = { x: W / 2, y: H / 2 };
+  return frame;
+}
+
+/* 半面コート専用の既定配置: チームAのみを使い、コート全体に広げて配置する。
+   ボールはハーフウェーライン中央（センターサークルの位置）に置く */
+function createHalfDefaultFrame() {
+  const { W, H } = court();
+  const frame = {};
+  const count = clamp(state.playerCountA || 8, 1, 11);
+  let basePositions;
+  if (count === 11) {
+    const f = formations["4-4-2"];
+    basePositions = [];
+    for (let i = 1; i <= 11; i++) basePositions.push(f[i]);
+  } else {
+    basePositions = simpleFormations[count];
+  }
+  // 通常フォーメーションのx範囲（およそ5〜46%）をハーフコート全体（8〜92%）へ引き伸ばす
+  const remapX = (x) => 8 + ((x - 5) / (46 - 5)) * (92 - 8);
+  for (let i = 0; i < count; i++) {
+    const key = `p-a${i + 1}`;
+    const b = basePositions[i];
+    const xPct = clamp(remapX(b.x), 2, 98);
+    frame[key] = { x: (xPct / 100) * W, y: (b.y / 100) * H };
+    state.players[key].label = b.role || "";
+  }
+  frame["ball"] = { x: W, y: H / 2 }; // ハーフウェーライン中央＝センターサークル位置
   return frame;
 }
 
@@ -1194,6 +1244,7 @@ function serializeDoc() {
     showPaths: state.showPaths,
     loopPlayback: state.loopPlayback,
     currentFrameIndex: state.currentFrameIndex,
+    activeSaveName: state.activeSaveName,
   });
 }
 
@@ -1234,6 +1285,7 @@ function loadDoc(doc) {
   state.speed = clamp(parseFloat(doc.speed) || 1.0, 0.2, 3.0);
   state.showPaths = doc.showPaths !== false;
   state.loopPlayback = doc.loopPlayback === true;
+  state.activeSaveName = typeof doc.activeSaveName === "string" ? doc.activeSaveName : null;
 
   renderAll();
 }
@@ -1317,7 +1369,9 @@ function renderSavesList() {
     btnLoad.addEventListener("click", () => {
       pushUndo();
       loadDoc(saves[name].doc);
+      state.activeSaveName = name;
       $("save-name").value = name;
+      updateActiveSaveUI();
       scheduleAutosave();
     });
 
@@ -1329,6 +1383,10 @@ function renderSavesList() {
       const s = readSaves();
       delete s[name];
       writeSaves(s);
+      if (state.activeSaveName === name) {
+        state.activeSaveName = null;
+        updateActiveSaveUI();
+      }
       renderSavesList();
     });
 
@@ -1337,6 +1395,29 @@ function renderSavesList() {
     row.appendChild(btnDel);
     list.appendChild(row);
   }
+  updateActiveSaveUI();
+}
+
+/* 現在編集中の保存（上書き保存の対象）の表示を更新する */
+function updateActiveSaveUI() {
+  const indicator = $("active-save-indicator");
+  const overwriteBtn = $("btn-overwrite-save");
+  if (!indicator || !overwriteBtn) return;
+  const saves = readSaves();
+  const valid = state.activeSaveName && saves[state.activeSaveName];
+  indicator.hidden = !valid;
+  overwriteBtn.hidden = !valid;
+  if (valid) $("active-save-name").textContent = state.activeSaveName;
+}
+
+/* 現在編集中の保存へ、名前欄を気にせずそのまま上書き保存する */
+function overwriteActiveSave() {
+  if (!state.activeSaveName) return;
+  const saves = readSaves();
+  if (!saves[state.activeSaveName]) return;
+  saves[state.activeSaveName] = { doc: serializeDoc(), savedAt: Date.now() };
+  writeSaves(saves);
+  renderSavesList();
 }
 
 function saveCurrentAs() {
@@ -1348,6 +1429,7 @@ function saveCurrentAs() {
   const saves = readSaves();
   saves[name] = { doc: serializeDoc(), savedAt: Date.now() };
   writeSaves(saves);
+  state.activeSaveName = name;
   renderSavesList();
 }
 
@@ -1415,15 +1497,23 @@ function setCourtType(type) {
   pushUndo();
 
   const o = court();
+  const switchingToHalf = type === "half";
   state.courtType = type;
   const n = court();
   const sx = n.W / o.W, sy = n.H / o.H, sr = Math.min(sx, sy);
 
-  // 既存の座標を新しいコートサイズへスケーリング
-  for (const frame of state.frames) {
-    for (const key of Object.keys(frame)) {
-      frame[key].x = clamp(frame[key].x * sx, 0, n.W);
-      frame[key].y = clamp(frame[key].y * sy, 0, n.H);
+  if (switchingToHalf) {
+    // 半面コートは1チーム用の練習を想定した既定配置に切り替える
+    state.playerCountB = 0;
+    state.frames = [createHalfDefaultFrame()];
+    state.currentFrameIndex = 0;
+  } else {
+    // 既存の座標を新しいコートサイズへスケーリング
+    for (const frame of state.frames) {
+      for (const key of Object.keys(frame)) {
+        frame[key].x = clamp(frame[key].x * sx, 0, n.W);
+        frame[key].y = clamp(frame[key].y * sy, 0, n.H);
+      }
     }
   }
   for (const a of state.annotations) {
@@ -1490,10 +1580,15 @@ function swapTeams() {
   scheduleAutosave();
 }
 
-/* ---------- 同じ役割ラベルの選手を横一列に整列（一度きりのスナップ、以後は自由に動かせる） ---------- */
+/* ---------- 同じ役割ラベルの選手を横一列に整列（一度きりのスナップ、以後は自由に動かせる） ----------
+   基準: 同じラベル（DF・MFなど）が付いた選手をチームごとにグループ化し、
+   そのグループのX座標（コートの奥行き方向）の平均値に全員のXを揃える。
+   Y座標（横方向の広がり）は基本的にそのまま活かすが、近すぎて重なりそうな場合だけ均等に広げ直す。 */
 function alignByRole() {
   pushUndo();
   const frame = currentFrame();
+  const { H } = court();
+  const minGap = Math.max(4, markerR() * 2.4);
   let aligned = false;
 
   for (const team of ["a", "b"]) {
@@ -1510,8 +1605,19 @@ function alignByRole() {
     for (const label of Object.keys(groups)) {
       const ids = groups[label];
       if (ids.length < 2) continue;
+
       const avgX = ids.reduce((sum, id) => sum + frame[id].x, 0) / ids.length;
       ids.forEach((id) => { frame[id].x = avgX; });
+
+      // Y方向が近すぎて重なりそうな場合は、現在の中心を保ったまま均等に広げ直す
+      const sorted = ids.slice().sort((idA, idB) => frame[idA].y - frame[idB].y);
+      const neededSpan = minGap * (sorted.length - 1);
+      const currentSpan = frame[sorted[sorted.length - 1]].y - frame[sorted[0]].y;
+      if (currentSpan < neededSpan) {
+        const centerY = sorted.reduce((sum, id) => sum + frame[id].y, 0) / sorted.length;
+        const startY = clamp(centerY - neededSpan / 2, 0, Math.max(0, H - neededSpan));
+        sorted.forEach((id, idx) => { frame[id].y = startY + idx * minGap; });
+      }
       aligned = true;
     }
   }
@@ -1559,7 +1665,7 @@ function captureTeamPositionsAsBasis(team) {
     const p = frame[id];
     if (!p) continue;
     let xPct = (p.x / W) * 100;
-    if (team === "b") xPct = 100 - xPct;
+    if (team === "a") xPct = 100 - xPct;
     positions[i] = { x: clamp(xPct, 0, 100), y: clamp((p.y / H) * 100, 0, 100), role: state.players[id].label || "" };
   }
   return positions;
@@ -1593,7 +1699,7 @@ function applyCustomFormationTo(team, count, entry) {
     const b = entry.positions[i];
     if (!b) continue;
     const xm = (b.x / 100) * W;
-    frame[id] = { x: team === "a" ? xm : W - xm, y: (b.y / 100) * H };
+    frame[id] = { x: team === "b" ? xm : W - xm, y: (b.y / 100) * H };
     state.players[id].label = b.role || "";
   }
   buildTokens();
@@ -1846,7 +1952,7 @@ function onPointerMove(e) {
     const frame = currentFrame();
     const p = frame[drag.id];
     if (!p) return;
-    const maxY = (drag.id !== "ball" && benchActive()) ? H + BENCH_DEPTH : H;
+    const maxY = (drag.id !== "ball" && benchActive()) ? H + BENCH_DEPTH - benchDragMargin() : H;
     p.x = clamp(pt.x + drag.grabDX, 0, W);
     p.y = clamp(pt.y + drag.grabDY, 0, maxY);
     if (drag.ballAttach && frame["ball"]) {
@@ -1999,6 +2105,7 @@ function renderAll() {
   updateFramesTimeline();
   syncCountsUI();
   updateFormationPanels();
+  updateActiveSaveUI();
   updateToolbarUI();
   updatePlayBtn();
   $("speed-slider").value = state.speed;
@@ -2131,8 +2238,15 @@ function setupEventListeners() {
   $("btn-both-inc").addEventListener("click", () => {
     if (state.playerCountA >= 11 && state.playerCountB >= 11) return;
     pushUndo();
-    setPlayerCount("a", state.playerCountA + 1, true);
-    setPlayerCount("b", state.playerCountB + 1, true);
+    if (state.playerCountA === state.playerCountB) {
+      setPlayerCount("a", state.playerCountA + 1, true);
+      setPlayerCount("b", state.playerCountB + 1, true);
+    } else if (state.playerCountA < state.playerCountB) {
+      // 人数が違うときは、まず少ない方だけ増やして揃える
+      setPlayerCount("a", state.playerCountA + 1, true);
+    } else {
+      setPlayerCount("b", state.playerCountB + 1, true);
+    }
   });
   $("btn-both-dec").addEventListener("click", () => {
     if (state.playerCountA <= 1 && state.playerCountB <= 0) return;
@@ -2155,6 +2269,7 @@ function setupEventListeners() {
 
   // 保存
   $("btn-save").addEventListener("click", saveCurrentAs);
+  $("btn-overwrite-save").addEventListener("click", overwriteActiveSave);
   $("btn-export").addEventListener("click", exportToFile);
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", (e) => {
