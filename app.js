@@ -58,16 +58,16 @@ const formations = {
     11: { x: 46, y: 85, role: "FW" },
   },
   "3-5-2": {
-    // 3バックはフラットに、MFの5人は1列に並べず、自ゴール側(x低め)に3人・前目(x高め)に2人の「M字」に配置する
-    // （左右の2人＝ウイングバックが前へ、中央3人＝アンカー役が控えめに構える形）
+    // 3バックはフラットに、MFの5人は1列に並べず、両ウイング＋中央の3人を前目(x高め)・
+    // その間の2人を後目(x低め)に配置する「W字」（前列5/7/9・後列6/8）
     1:  { x: 5,  y: 50, role: "GK" },
     2:  { x: 20, y: 22, role: "DF" },
     3:  { x: 20, y: 50, role: "DF" },
     4:  { x: 20, y: 78, role: "DF" },
     5:  { x: 40, y: 8,  role: "MF" },
-    6:  { x: 29, y: 30, role: "MF" },
-    7:  { x: 29, y: 50, role: "MF" },
-    8:  { x: 29, y: 70, role: "MF" },
+    6:  { x: 27, y: 30, role: "MF" },
+    7:  { x: 40, y: 50, role: "MF" },
+    8:  { x: 27, y: 70, role: "MF" },
     9:  { x: 40, y: 92, role: "MF" },
     10: { x: 46, y: 35, role: "FW" },
     11: { x: 46, y: 65, role: "FW" },
@@ -161,7 +161,7 @@ const state = {
   portrait: window.innerHeight > window.innerWidth,
   orientationManual: false, // ユーザーが手動で縦横を切り替えたら自動追従をやめる
   halfFacing: "left",       // 半面コート専用: left | right | up | down（ゴールの向き）
-  tool: "select",           // select | circle | rect | arrow-pass | arrow-run
+  tool: "select",           // select | circle | rect | arrow-pass | arrow-run | line
   frames: [],               // 各コマ: { "p-a1": {x,y}, ..., "ball": {x,y} } （メートル座標）
   currentFrameIndex: 0,
   players: {},              // "p-a1" -> { team, num, label }
@@ -434,11 +434,11 @@ function buildAnnoEl(a) {
     el("rect", { x: a.x, y: a.y, width: a.w, height: a.h, rx: 0.5, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw }, g);
   } else if (a.type === "arrow") {
     const dash = a.style === "run" ? "1.6 1.2" : null;
-    const markerId = a.style === "run" ? "ah-run" : "ah-pass";
+    const markerId = a.style === "run" ? "ah-run" : a.style === "pass" ? "ah-pass" : null;
     el("line", {
       x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2,
       stroke: color, "stroke-width": sw, "stroke-dasharray": dash,
-      "marker-end": `url(#${markerId})`,
+      "marker-end": markerId ? `url(#${markerId})` : null,
     }, g);
     // タッチしやすいように透明の太い当たり判定を重ねる
     el("line", {
@@ -978,6 +978,26 @@ function updateHUD() {
   for (let i = 0; i < thumbs.length; i++) {
     thumbs[i].classList.toggle("active", i === state.currentFrameIndex);
   }
+  const noteEl = $("frame-note");
+  if (noteEl && document.activeElement !== noteEl) {
+    noteEl.value = (currentFrame() && currentFrame().note) || "";
+  }
+}
+
+/* 現在のコマのサムネイルにメモ有無のドット表示を反映する */
+function updateCurrentThumbNoteDot() {
+  const thumbs = $("frames-list").children;
+  const thumb = thumbs[state.currentFrameIndex];
+  if (!thumb) return;
+  const has = !!(currentFrame() && currentFrame().note);
+  let dot = thumb.querySelector(".thumb-note-dot");
+  if (has && !dot) {
+    dot = document.createElement("span");
+    dot.className = "thumb-note-dot";
+    thumb.appendChild(dot);
+  } else if (!has && dot) {
+    dot.remove();
+  }
 }
 
 function buildThumbSvg(frame) {
@@ -1019,6 +1039,11 @@ function updateFramesTimeline() {
     n.className = "thumb-num";
     n.textContent = idx + 1;
     d.appendChild(n);
+    if (f.note) {
+      const dot = document.createElement("span");
+      dot.className = "thumb-note-dot";
+      d.appendChild(dot);
+    }
     d.addEventListener("click", () => {
       stopPlayback();
       cancelAnim();
@@ -1076,6 +1101,10 @@ function loadDoc(doc) {
 
   state.frames = Array.isArray(doc.frames) && doc.frames.length > 0 ? deep(doc.frames) : [createDefaultFrame(false)];
   state.frames.forEach(ensureFrameCompleteness);
+  state.frames.forEach((f) => {
+    if (typeof f.note === "string") f.note = f.note.slice(0, 200);
+    else delete f.note;
+  });
   state.currentFrameIndex = clamp(parseInt(doc.currentFrameIndex, 10) || 0, 0, state.frames.length - 1);
 
   state.annotations = Array.isArray(doc.annotations)
@@ -1199,26 +1228,14 @@ function renderSavesList() {
   updateActiveSaveUI();
 }
 
-/* 現在編集中の保存（上書き保存の対象）の表示を更新する */
+/* 現在編集中の保存（名前欄が一致していれば「保存」で上書きされる）の表示を更新する */
 function updateActiveSaveUI() {
   const indicator = $("active-save-indicator");
-  const overwriteBtn = $("btn-overwrite-save");
-  if (!indicator || !overwriteBtn) return;
+  if (!indicator) return;
   const saves = readSaves();
   const valid = state.activeSaveName && saves[state.activeSaveName];
   indicator.hidden = !valid;
-  overwriteBtn.hidden = !valid;
   if (valid) $("active-save-name").textContent = state.activeSaveName;
-}
-
-/* 現在編集中の保存へ、名前欄を気にせずそのまま上書き保存する */
-function overwriteActiveSave() {
-  if (!state.activeSaveName) return;
-  const saves = readSaves();
-  if (!saves[state.activeSaveName]) return;
-  saves[state.activeSaveName] = { doc: serializeDoc(), savedAt: Date.now() };
-  writeSaves(saves);
-  renderSavesList();
 }
 
 function saveCurrentAs() {
@@ -1358,6 +1375,7 @@ function setCourtType(type) {
     // 既存の座標を新しいコートサイズへスケーリング
     for (const frame of state.frames) {
       for (const key of Object.keys(frame)) {
+        if (key === "note") continue;
         frame[key].x = clamp(frame[key].x * sx, 0, n.W);
         frame[key].y = clamp(frame[key].y * sy, 0, n.H);
       }
@@ -1823,9 +1841,12 @@ function beginCreate(pt) {
   } else if (state.tool === "rect") {
     anno = { id: newAnnoId(), type: "rect", x: start.x, y: start.y, w: 0.5, h: 0.5 };
   } else {
+    let style = "pass";
+    if (state.tool === "arrow-run") style = "run";
+    else if (state.tool === "line") style = "line";
     anno = {
       id: newAnnoId(), type: "arrow",
-      style: state.tool === "arrow-run" ? "run" : "pass",
+      style,
       x1: start.x, y1: start.y, x2: start.x, y2: start.y,
     };
   }
@@ -2063,11 +2084,22 @@ function setupEventListeners() {
     }
   });
 
+  // コマごとのメモ
+  $("frame-note").addEventListener("input", () => {
+    const f = currentFrame();
+    if (!f) return;
+    const val = $("frame-note").value;
+    if (val) f.note = val; else delete f.note;
+    updateCurrentThumbNoteDot();
+    scheduleAutosave();
+  });
+
   // コマの追加・削除
   $("btn-add-frame").addEventListener("click", () => {
     stopPlayback(); cancelAnim();
     pushUndo();
     const newFrame = deep(currentFrame());
+    delete newFrame.note; // メモはコマごとに内容が異なるため引き継がない
     state.frames.splice(state.currentFrameIndex + 1, 0, newFrame);
     state.currentFrameIndex++;
     drawPaths();
@@ -2173,7 +2205,6 @@ function setupEventListeners() {
 
   // 保存
   $("btn-save").addEventListener("click", saveCurrentAs);
-  $("btn-overwrite-save").addEventListener("click", overwriteActiveSave);
   $("btn-export").addEventListener("click", exportToFile);
   $("btn-import").addEventListener("click", () => $("import-file").click());
   $("import-file").addEventListener("change", (e) => {
@@ -2191,6 +2222,45 @@ function setupEventListeners() {
   $("label-editor").addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveLabelEditor();
     else if (e.key === "Escape") closeLabelEditor();
+  });
+
+  // キーボードショートカット（入力欄にフォーカス中・ダイアログ表示中は無効）
+  window.addEventListener("keydown", (e) => {
+    const tag = document.activeElement && document.activeElement.tagName;
+    const typing = tag === "INPUT" || tag === "TEXTAREA";
+    if (typing || !$("editor-backdrop").hidden) return;
+
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "z") {
+      e.preventDefault();
+      $("btn-undo").click();
+      return;
+    }
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (state.selectedAnno) {
+        e.preventDefault();
+        deleteAnno(state.selectedAnno);
+      }
+      return;
+    }
+    if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      $("btn-prev").click();
+      return;
+    }
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      $("btn-next").click();
+      return;
+    }
+    if (e.code === "Space") {
+      e.preventDefault();
+      $("btn-play").click();
+      return;
+    }
+    if (e.key === "Escape") {
+      if (state.selectedAnno) selectAnno(null);
+      else if (state.tool !== "select") setTool("select");
+    }
   });
 
   // リサイズ（縦横の自動追従）

@@ -463,6 +463,30 @@ input[type="range"]::-webkit-slider-thumb {
   border-color: rgba(255, 255, 255, 0.35);
 }
 
+.frame-thumb .thumb-note-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+.frame-note {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-panel);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
 /* ---------- 人数コントロール ---------- */
 .player-count-row {
   display: flex;

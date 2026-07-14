@@ -29,6 +29,7 @@
           <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢</button>
           <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→ パス</button>
           <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢ 走路</button>
+          <button data-tool="line" class="tool-btn" title="ライン（直線）">― ライン</button>
         </div>
         <div class="tool-group">
           <button id="btn-undo" title="ひとつ戻す" disabled>↩ 戻す</button>
@@ -115,6 +116,7 @@
         <summary>🎬 コマ一覧・再生設定</summary>
         <div class="panel-body">
           <div id="frames-list" class="frames-list"></div>
+          <textarea id="frame-note" class="frame-note" rows="2" maxlength="200" placeholder="このコマのメモ（例: ここでパスを出す）"></textarea>
           <div class="slider-container">
             <div class="slider-label">
               <span>再生速度</span>
@@ -199,12 +201,11 @@
       <details class="panel" id="panel-save">
         <summary>💾 保存・読み込み</summary>
         <div class="panel-body">
-          <div id="active-save-indicator" class="note" hidden>編集中: <strong id="active-save-name"></strong></div>
+          <div id="active-save-indicator" class="note" hidden>編集中: <strong id="active-save-name"></strong>（「保存」で上書きされます）</div>
           <div class="save-row">
             <input id="save-name" placeholder="名前（例: ロンド4対2）" maxlength="30">
             <button id="btn-save" class="primary">保存</button>
           </div>
-          <button id="btn-overwrite-save" hidden>💾 上書き保存</button>
           <div id="saves-list" class="saves-list"></div>
           <div class="btn-group-2">
             <button id="btn-export">📤 ファイルに書き出し</button>
@@ -221,17 +222,18 @@
           <ul>
             <li>選手・ボールはドラッグで動かせます。ボールの近くの選手を動かすとボールも一緒に動きます。</li>
             <li>選手をタップすると番号とラベル（名前・役割）を変えられます。</li>
-            <li>◯・▢・矢印ボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
+            <li>◯・▢・矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
             <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。</li>
             <li>選手やボールをコマ間で動かすと、その移動が自動でパス（実線）・走路（破線）の矢印として表示されます。</li>
             <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
-            <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。</li>
+            <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。コマ一覧の下の欄に、そのコマのメモ（やることなど）を書き込めます。</li>
             <li>11人未満の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます（11人以上はプリセットが使えます。12人目以降は控えに残ります）。</li>
             <li>半面コートでは⬅⬆⬇➡ボタンで「攻める方向」を選べます（自陣ゴールは反対側に表示されます）。</li>
             <li>コート下の「控え」エリアに選手をドラッグすると控えにできます（無地コートを除く）。人数は最大20人まで増やせ、12人目以降は自動で控えに入ります。</li>
             <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」でGK/DF/MF/FWのラベルが付いた選手を一列に整列できます（控えの選手は控え内で整列。固有名を付けた選手は対象外です）。</li>
             <li>人数を増減すると、GK/DF/MF/FWのラベルがFW:MF:DF=1:2:1の比率で自動的に貼り直されます（固有名を付けた選手は変更されません）。</li>
-            <li>作った作戦は「保存・読み込み」から名前を付けて残せます。同じ名前で保存すると「編集中」表示が出て、以後は「上書き保存」ボタンで素早く更新できます。</li>
+            <li>作った作戦は「保存・読み込み」から名前を付けて残せます。名前欄に「編集中」の名前が表示されている間は、そのまま「保存」を押すと上書き保存になります（名前を変えると別の作戦として新規保存されます）。</li>
+            <li>キーボードショートカット: Ctrl+Z（ひとつ戻す）、← →（前後のコマ）、Space（再生/一時停止）、Delete（選択中の図形を削除）、Esc（図形の選択解除）。入力欄にカーソルがあるときは無効です。</li>
           </ul>
         </div>
       </details>
