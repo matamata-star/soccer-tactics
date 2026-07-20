@@ -1017,7 +1017,13 @@ function pentagonPoints(cx, cy, r, rotDeg) {
   return pts.join(" ");
 }
 
-/* 定番のサッカーボール柄（中央の黒五角形＋周囲5枚の黒五角形を円でクリップ） */
+/* 定番のサッカーボール柄（切頂二十面体を正面から見た図）。
+   実物と同じ隣接ルールで作図する:
+   - 五角形の辺は必ず六角形の辺と共有される
+   - 六角形の周りは「六・五・六・五・六・五」の交互
+   構成: 中央の黒五角形 → その5辺と辺を共有する白い六角形×5（六角形同士も
+   放射線上の辺B-Fを完全共有）→ 中央五角形の頂点方向に、隣り合う2つの六角形の
+   外側の辺（F-E・C-D）を共有する縁の黒五角形×5（円形クリップで縁が切れて見える） */
 function buildBallPattern(rb) {
   const g = el("g", { "pointer-events": "none" });
   const defs = el("defs", null, g);
@@ -1025,25 +1031,53 @@ function buildBallPattern(rb) {
   el("circle", { cx: 0, cy: 0, r: rb * 0.99 }, clip);
 
   const pat = el("g", { "clip-path": "url(#ball-pattern-clip)" }, g);
-  const pentR = rb * 0.42;
-  const satPentR = pentR * 0.86; // 周辺の五角形は中央より少し小さく
-  const satDist = rb * 0.8;
+  const dark = "#20242b";
+  // ballR()は画面上ほぼ常に9px固定（9/pxPerMeter()）なので、比率だけだと縫い目線が
+  // 実機で1px未満になり見えなくなる。画面上で最低1px強は確保する
+  const seam = Math.max(rb * 0.045, 1.1 / pxPerMeter());
+  const D2R = Math.PI / 180;
+  const u = (deg) => [Math.cos(deg * D2R), Math.sin(deg * D2R)];
+  const fmt = (pt) => `${pt[0].toFixed(3)},${pt[1].toFixed(3)}`;
 
-  el("polygon", { points: pentagonPoints(0, 0, pentR, -90), fill: "#20242b" }, pat);
+  const add = (P, dir, len) => [P[0] + len * dir[0], P[1] + len * dir[1]];
+  const p = rb * 0.32;                  // 中央五角形の外接円半径（頂点が上）
+  const s = 2 * p * Math.sin(36 * D2R); // 全パネル共通の辺の長さ
+
+  // 中央の黒五角形
+  el("polygon", {
+    points: pentagonPoints(0, 0, p, -90), fill: dark,
+    stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
+  }, pat);
+
+  // 白い六角形×5。頂点A,Bは中央五角形の頂点、F,Cは頂点方向（放射線上）の延長にあり、
+  // A-B辺は中央五角形と、B-F/C-A辺は隣の六角形とそれぞれ完全に辺を共有する
   for (let k = 0; k < 5; k++) {
-    const ang = -90 + 36 + k * 72;
-    const cx = satDist * Math.cos(ang * Math.PI / 180);
-    const cy = satDist * Math.sin(ang * Math.PI / 180);
-    el("polygon", { points: pentagonPoints(cx, cy, satPentR, ang + 180), fill: "#20242b" }, pat);
+    const phi = -90 + 36 + k * 72; // 五角形の辺の外向き（六角形の中心方向）
+    const t1 = phi - 36;           // 五角形の頂点方向（片側）
+    const t2 = phi + 36;           // 五角形の頂点方向（もう片側）
+    const A = [p * u(t2)[0], p * u(t2)[1]];
+    const B = [p * u(t1)[0], p * u(t1)[1]];
+    const F = [(p + s) * u(t1)[0], (p + s) * u(t1)[1]];
+    const C = [(p + s) * u(t2)[0], (p + s) * u(t2)[1]];
+    const E = add(F, u(phi + 36), s);
+    const D = add(C, u(phi - 36), s);
+    el("polygon", {
+      points: [A, B, F, E, D, C].map(fmt).join(" "), fill: "none",
+      stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
+    }, pat);
   }
-  // 継ぎ目風の薄い線
+
+  // 縁の黒五角形×5（中央五角形の頂点方向）。隣り合う2つの六角形の外側の辺
+  // （F-EとC-D）と辺を共有し、円形クリップでボールの縁が切れて見える
   for (let k = 0; k < 5; k++) {
-    const a1 = (-90 + k * 72) * Math.PI / 180;
-    const a2 = (-90 + 36 + k * 72) * Math.PI / 180;
-    el("line", {
-      x1: (pentR * Math.cos(a1)).toFixed(2), y1: (pentR * Math.sin(a1)).toFixed(2),
-      x2: (satDist * 0.42 * Math.cos(a2)).toFixed(2), y2: (satDist * 0.42 * Math.sin(a2)).toFixed(2),
-      stroke: "#8a9099", "stroke-width": Math.max(0.05, rb * 0.03),
+    const th = -90 + 72 * k;
+    const F = [(p + s) * u(th)[0], (p + s) * u(th)[1]];
+    const ER = add(F, u(th + 72), s); // 片側の六角形のF-E辺の先端
+    const DL = add(F, u(th - 72), s); // もう片側の六角形のC-D辺の先端
+    const M = [1.6 * rb * u(th)[0], 1.6 * rb * u(th)[1]];
+    el("polygon", {
+      points: [ER, F, DL, M].map(fmt).join(" "),
+      fill: dark, stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
     }, pat);
   }
   return g;
