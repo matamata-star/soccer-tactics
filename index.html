@@ -27,6 +27,7 @@
           <button data-tool="select" class="tool-btn active" title="選択・移動">☝ 選択</button>
           <button data-tool="circle" class="tool-btn" title="サークルを描く">◯</button>
           <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢</button>
+          <button data-tool="tri" class="tool-btn" title="三角形を描く">△</button>
           <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→ パス</button>
           <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢ 走路</button>
           <button data-tool="line" class="tool-btn" title="ライン（直線）">― ライン</button>
@@ -46,12 +47,6 @@
           <button data-facing="up" class="facing-btn" title="上へ攻める（ゴールは下）">⬆</button>
           <button data-facing="down" class="facing-btn" title="下へ攻める（ゴールは上）">⬇</button>
           <button data-facing="right" class="facing-btn" title="右へ攻める（ゴールは左）">➡</button>
-        </div>
-        <div class="tool-group">
-          <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
-          <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
-          <button class="swatch" data-theme="pastel" title="ライトグリーン" style="--swatch-c:#8fd19e"></button>
-          <button class="swatch" data-theme="classic" title="ダークグリーン" style="--swatch-c:#14381d"></button>
         </div>
       </div>
 
@@ -216,16 +211,31 @@
         </div>
       </details>
 
+      <details class="panel" id="panel-settings">
+        <summary>⚙ 設定</summary>
+        <div class="panel-body">
+          <div class="settings-row">
+            <span class="settings-label">コートの色</span>
+            <div class="swatch-group">
+              <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
+              <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
+              <button class="swatch" data-theme="pastel" title="ライトグリーン" style="--swatch-c:#8fd19e"></button>
+              <button class="swatch" data-theme="classic" title="ダークグリーン" style="--swatch-c:#14381d"></button>
+            </div>
+          </div>
+        </div>
+      </details>
+
       <details class="panel" id="panel-help">
         <summary>❓ 使い方</summary>
         <div class="panel-body help-card">
           <ul>
             <li>選手・ボールはドラッグで動かせます。ボールの近くの選手を動かすとボールも一緒に動きます。</li>
             <li>選手をタップすると番号とラベル（名前・役割）を変えられます。</li>
-            <li>◯・▢・矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
-            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。</li>
+            <li>◯・▢・△・矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
+            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。▢と△は緑色のハンドルをドラッグすると回転できます。</li>
             <li>選手やボールをコマ間で動かすと、その移動が自動でパス（実線）・走路（破線）の矢印として表示されます。</li>
-            <li>コート右上のカラーの丸ボタンで芝の色を切り替えられます。</li>
+            <li>芝の色はサイドパネルの「⚙ 設定」で切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。コマ一覧の下の欄に、そのコマのメモ（やることなど）を書き込めます。</li>
             <li>11人未満の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます（11人以上はプリセットが使えます。12人目以降は控えに残ります）。</li>
             <li>半面コートでは⬅⬆⬇➡ボタンで「攻める方向」を選べます（自陣ゴールは反対側に表示されます）。</li>

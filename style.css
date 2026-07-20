@@ -172,7 +172,7 @@ svg#board {
 }
 
 /* 色見本は正方形のチップ。.toolbar button のtransparent背景より
-   確実に優先させるため .toolbar .swatch という2クラスのセレクタで指定する */
+   確実に優先させるため .swatch-group .swatch という2クラスのセレクタで指定する */
 .swatch {
   width: 34px;
   height: 34px;
@@ -182,7 +182,12 @@ svg#board {
   border: 2px solid rgba(255, 255, 255, 0.2);
 }
 
-.toolbar .swatch {
+.swatch-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.swatch-group .swatch {
   background: var(--swatch-c);
 }
 
@@ -191,9 +196,22 @@ svg#board {
   box-shadow: 0 0 0 2px var(--accent-color);
 }
 
-/* .toolbar button.active の緑背景に負けないよう、選択中も本来の色見本を表示する */
-.toolbar .swatch.active {
+/* button.active の緑背景に負けないよう、選択中も本来の色見本を表示する */
+.swatch-group .swatch.active {
   background: var(--swatch-c);
+}
+
+/* ---------- 設定パネル ---------- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* ---------- 再生バー ---------- */

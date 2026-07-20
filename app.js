@@ -161,7 +161,7 @@ const state = {
   portrait: window.innerHeight > window.innerWidth,
   orientationManual: false, // ユーザーが手動で縦横を切り替えたら自動追従をやめる
   halfFacing: "left",       // 半面コート専用: left | right | up | down（ゴールの向き）
-  tool: "select",           // select | circle | rect | arrow-pass | arrow-run | line
+  tool: "select",           // select | circle | rect | tri | arrow-pass | arrow-run | line
   frames: [],               // 各コマ: { "p-a1": {x,y}, ..., "ball": {x,y} } （メートル座標）
   currentFrameIndex: 0,
   players: {},              // "p-a1" -> { team, num, label }
@@ -419,6 +419,37 @@ function getAnno(id) {
   return state.annotations.find((a) => a.id === id) || null;
 }
 
+/* 点(x,y)を(cx,cy)中心にdeg度回転した座標を返す */
+function rotatePt(x, y, cx, cy, deg) {
+  const rad = (deg * Math.PI) / 180;
+  const c = Math.cos(rad), s = Math.sin(rad);
+  const dx = x - cx, dy = y - cy;
+  return { x: cx + dx * c - dy * s, y: cy + dx * s + dy * c };
+}
+
+function annoCenter(a) {
+  if (a.type === "rect") return { x: a.x + a.w / 2, y: a.y + a.h / 2 };
+  if (a.type === "circle" || a.type === "tri") return { x: a.cx, y: a.cy };
+  return { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 };
+}
+
+/* 正三角形の3頂点（rot=0で頂点が上）。r は外接円の半径 */
+function triPointsArr(a) {
+  return [0, 1, 2].map((i) => {
+    const ang = (((a.rot || 0) - 90 + i * 120) * Math.PI) / 180;
+    return { x: a.cx + a.r * Math.cos(ang), y: a.cy + a.r * Math.sin(ang) };
+  });
+}
+
+function triPoints(a) {
+  return triPointsArr(a).map((p) => `${p.x},${p.y}`).join(" ");
+}
+
+const bboxOfPts = (pts) => ({
+  minX: Math.min(...pts.map((p) => p.x)), minY: Math.min(...pts.map((p) => p.y)),
+  maxX: Math.max(...pts.map((p) => p.x)), maxY: Math.max(...pts.map((p) => p.y)),
+});
+
 function annoStrokeColor(a) {
   if (a.type === "arrow") return a.style === "pass" ? "#ffffff" : "#ffd54a";
   return "#ffd54a";
@@ -431,7 +462,12 @@ function buildAnnoEl(a) {
   if (a.type === "circle") {
     el("circle", { cx: a.cx, cy: a.cy, r: a.r, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw }, g);
   } else if (a.type === "rect") {
-    el("rect", { x: a.x, y: a.y, width: a.w, height: a.h, rx: 0.5, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw }, g);
+    el("rect", {
+      x: a.x, y: a.y, width: a.w, height: a.h, rx: 0.5, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw,
+      transform: a.rot ? `rotate(${a.rot} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
+    }, g);
+  } else if (a.type === "tri") {
+    el("polygon", { points: triPoints(a), fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw, "stroke-linejoin": "round" }, g);
   } else if (a.type === "arrow") {
     const dash = a.style === "run" ? "1.6 1.2" : null;
     const markerId = a.style === "run" ? "ah-run" : a.style === "pass" ? "ah-pass" : null;
@@ -456,7 +492,18 @@ function renderAnnotations() {
 
 function annoBBox(a) {
   if (a.type === "circle") return { minX: a.cx - a.r, minY: a.cy - a.r, maxX: a.cx + a.r, maxY: a.cy + a.r };
-  if (a.type === "rect") return { minX: a.x, minY: a.y, maxX: a.x + a.w, maxY: a.y + a.h };
+  if (a.type === "tri") return bboxOfPts(triPointsArr(a));
+  if (a.type === "rect") {
+    if (!a.rot) return { minX: a.x, minY: a.y, maxX: a.x + a.w, maxY: a.y + a.h };
+    const c = annoCenter(a);
+    const corners = [
+      rotatePt(a.x, a.y, c.x, c.y, a.rot),
+      rotatePt(a.x + a.w, a.y, c.x, c.y, a.rot),
+      rotatePt(a.x, a.y + a.h, c.x, c.y, a.rot),
+      rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, a.rot),
+    ];
+    return bboxOfPts(corners);
+  }
   return {
     minX: Math.min(a.x1, a.x2), minY: Math.min(a.y1, a.y2),
     maxX: Math.max(a.x1, a.x2), maxY: Math.max(a.y1, a.y2),
@@ -476,20 +523,35 @@ function renderHandles() {
   if (a.type === "circle") {
     el("circle", { cx: a.cx, cy: a.cy, r: a.r + 0.9, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
   } else if (a.type === "rect") {
-    el("rect", { x: a.x - 0.9, y: a.y - 0.9, width: a.w + 1.8, height: a.h + 1.8, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
+    el("rect", {
+      x: a.x - 0.9, y: a.y - 0.9, width: a.w + 1.8, height: a.h + 1.8, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none",
+      transform: a.rot ? `rotate(${a.rot} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
+    }, L);
+  } else if (a.type === "tri") {
+    el("polygon", { points: triPoints({ cx: a.cx, cy: a.cy, r: a.r + 0.9, rot: a.rot }), fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
   }
 
-  const mkHandle = (x, y, role) => {
+  const mkHandle = (x, y, role, fillColor) => {
     const g = el("g", { class: "handle", "data-role": role, transform: `translate(${x} ${y})` }, L);
     el("circle", { r: hr * 1.4, fill: "transparent" }, g); // 当たり判定
-    el("circle", { r: hr, fill: "#ffffff", stroke: "#1f2937", "stroke-width": 0.18 }, g);
+    el("circle", { r: hr, fill: fillColor || "#ffffff", stroke: "#1f2937", "stroke-width": 0.18 }, g);
     return g;
   };
 
   if (a.type === "circle") {
     mkHandle(a.cx + a.r, a.cy, "resize");
   } else if (a.type === "rect") {
-    mkHandle(a.x + a.w, a.y + a.h, "resize");
+    const c = annoCenter(a);
+    const br = rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, a.rot || 0);
+    mkHandle(br.x, br.y, "resize");
+    const top = rotatePt(c.x, a.y - 2.4, c.x, c.y, a.rot || 0);
+    mkHandle(top.x, top.y, "rotate", "#10b981"); // 緑＝回転ハンドル
+  } else if (a.type === "tri") {
+    const v = triPointsArr(a)[1]; // 右下の頂点＝サイズ変更
+    mkHandle(v.x, v.y, "resize");
+    const angA = (((a.rot || 0) - 90) * Math.PI) / 180; // 頂点方向の先＝回転
+    const rd = a.r + 2.4;
+    mkHandle(a.cx + rd * Math.cos(angA), a.cy + rd * Math.sin(angA), "rotate", "#10b981");
   } else if (a.type === "arrow") {
     mkHandle(a.x1, a.y1, "p1");
     mkHandle(a.x2, a.y2, "p2");
@@ -527,7 +589,7 @@ function duplicateAnno(id) {
   const copy = deep(a);
   copy.id = newAnnoId();
   const off = 3;
-  if (copy.type === "circle") {
+  if (copy.type === "circle" || copy.type === "tri") {
     copy.cx = clamp(copy.cx + off, 0, W);
     copy.cy = clamp(copy.cy + off, 0, H);
   } else if (copy.type === "rect") {
@@ -1012,7 +1074,12 @@ function buildThumbSvg(frame) {
     if (a.type === "circle") {
       el("circle", { cx: a.cx, cy: a.cy, r: a.r, fill: "none", stroke: "rgba(255,213,74,0.5)", "stroke-width": 0.8 }, s);
     } else if (a.type === "rect") {
-      el("rect", { x: a.x, y: a.y, width: a.w, height: a.h, fill: "none", stroke: "rgba(255,213,74,0.5)", "stroke-width": 0.8 }, s);
+      el("rect", {
+        x: a.x, y: a.y, width: a.w, height: a.h, fill: "none", stroke: "rgba(255,213,74,0.5)", "stroke-width": 0.8,
+        transform: a.rot ? `rotate(${a.rot} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
+      }, s);
+    } else if (a.type === "tri") {
+      el("polygon", { points: triPoints(a), fill: "none", stroke: "rgba(255,213,74,0.5)", "stroke-width": 0.8 }, s);
     } else if (a.type === "arrow") {
       el("line", { x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, stroke: "rgba(255,255,255,0.4)", "stroke-width": 0.8 }, s);
     }
@@ -1056,7 +1123,7 @@ function updateFramesTimeline() {
 
 /* ---------- Undo ---------- */
 function serializeDoc() {
-  return deep({
+  const doc = deep({
     v: 1,
     courtType: state.courtType,
     courtColor: state.courtColor,
@@ -1072,6 +1139,52 @@ function serializeDoc() {
     currentFrameIndex: state.currentFrameIndex,
     activeSaveName: state.activeSaveName,
   });
+  // 既定値のまま（番号=初期値・ラベル無し）の選手は保存しない。読み込み時にensurePlayersが同じ値で補完する
+  for (const key of Object.keys(doc.players)) {
+    const p = doc.players[key];
+    if (p.label === "" && p.num === key.replace(/^p-[ab]/, "")) delete doc.players[key];
+  }
+  // 座標を小数2桁（メートル）に丸めてデータを軽くする。1cm未満の精度は表示に影響しない
+  const r2 = (v) => (typeof v === "number" ? Math.round(v * 100) / 100 : v);
+  for (const f of doc.frames) {
+    for (const k of Object.keys(f)) {
+      if (k === "note") continue;
+      f[k].x = r2(f[k].x); f[k].y = r2(f[k].y);
+    }
+  }
+  for (const a of doc.annotations) {
+    for (const k of Object.keys(a)) a[k] = r2(a[k]);
+  }
+  return doc;
+}
+
+/* 外部ファイル由来の図形データを型・数値チェックして正規化する（壊れたものはnull＝破棄） */
+function sanitizeAnno(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const n = (v) => { const x = Number(v); return Number.isFinite(x) ? x : null; };
+  const id = typeof raw.id === "string" && raw.id ? raw.id.slice(0, 40) : newAnnoId();
+  const rot = (((n(raw.rot) || 0) % 360) + 360) % 360;
+  if (raw.type === "circle" || raw.type === "tri") {
+    const cx = n(raw.cx), cy = n(raw.cy), r = n(raw.r);
+    if (cx === null || cy === null || r === null) return null;
+    const a = { id, type: raw.type, cx, cy, r: Math.max(0.4, r) };
+    if (raw.type === "tri" && rot) a.rot = rot;
+    return a;
+  }
+  if (raw.type === "rect") {
+    const x = n(raw.x), y = n(raw.y), w = n(raw.w), h = n(raw.h);
+    if (x === null || y === null || w === null || h === null) return null;
+    const a = { id, type: "rect", x, y, w: Math.max(0.5, w), h: Math.max(0.5, h) };
+    if (rot) a.rot = rot;
+    return a;
+  }
+  if (raw.type === "arrow") {
+    const x1 = n(raw.x1), y1 = n(raw.y1), x2 = n(raw.x2), y2 = n(raw.y2);
+    if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
+    const style = ["pass", "run", "line"].includes(raw.style) ? raw.style : "pass";
+    return { id, type: "arrow", style, x1, y1, x2, y2 };
+  }
+  return null;
 }
 
 function loadDoc(doc) {
@@ -1100,15 +1213,24 @@ function loadDoc(doc) {
   }
 
   state.frames = Array.isArray(doc.frames) && doc.frames.length > 0 ? deep(doc.frames) : [createDefaultFrame(false)];
-  state.frames.forEach(ensureFrameCompleteness);
+  state.frames = state.frames.filter((f) => f && typeof f === "object");
+  if (state.frames.length === 0) state.frames = [createDefaultFrame(false)];
+  // 外部ファイル由来の壊れた値（数値でない座標など）は捨てて自動補完に任せる
   state.frames.forEach((f) => {
+    for (const key of Object.keys(f)) {
+      if (key === "note") continue;
+      const x = Number(f[key] && f[key].x), y = Number(f[key] && f[key].y);
+      if (Number.isFinite(x) && Number.isFinite(y)) f[key] = { x, y };
+      else delete f[key];
+    }
     if (typeof f.note === "string") f.note = f.note.slice(0, 200);
     else delete f.note;
   });
+  state.frames.forEach(ensureFrameCompleteness);
   state.currentFrameIndex = clamp(parseInt(doc.currentFrameIndex, 10) || 0, 0, state.frames.length - 1);
 
   state.annotations = Array.isArray(doc.annotations)
-    ? doc.annotations.filter((a) => a && ["circle", "rect", "arrow"].includes(a.type))
+    ? doc.annotations.map(sanitizeAnno).filter(Boolean)
     : [];
   state.selectedAnno = null;
 
@@ -1270,6 +1392,12 @@ function importFromFile(file) {
       if (!doc || !Array.isArray(doc.frames)) throw new Error("invalid");
       pushUndo();
       loadDoc(doc);
+      // 読み込んだファイル名を保存名の欄に入れておく。同名の保存がこの端末にあるときだけ
+      // 「編集中」（＝保存で上書き）扱いにし、無ければ新規扱いにする
+      const base = String(file.name || "").replace(/\.[^.]+$/, "").trim().slice(0, 30);
+      if (base) $("save-name").value = base;
+      state.activeSaveName = base && readSaves()[base] ? base : null;
+      updateActiveSaveUI();
       scheduleAutosave();
     } catch (e) {
       alert("ファイルを読み込めませんでした（このアプリで書き出したJSONを選んでください）");
@@ -1389,7 +1517,7 @@ function setCourtType(type) {
     }
   }
   for (const a of state.annotations) {
-    if (a.type === "circle") {
+    if (a.type === "circle" || a.type === "tri") {
       a.cx = clamp(a.cx * sx, 0, n.W); a.cy = clamp(a.cy * sy, 0, n.H); a.r = Math.max(1, a.r * sr);
     } else if (a.type === "rect") {
       a.x = clamp(a.x * sx, 0, n.W); a.y = clamp(a.y * sy, 0, n.H);
@@ -1840,6 +1968,8 @@ function beginCreate(pt) {
     anno = { id: newAnnoId(), type: "circle", cx: start.x, cy: start.y, r: 0.4 };
   } else if (state.tool === "rect") {
     anno = { id: newAnnoId(), type: "rect", x: start.x, y: start.y, w: 0.5, h: 0.5 };
+  } else if (state.tool === "tri") {
+    anno = { id: newAnnoId(), type: "tri", cx: start.x, cy: start.y, r: 0.4 };
   } else {
     let style = "pass";
     if (state.tool === "arrow-run") style = "run";
@@ -1889,7 +2019,7 @@ function onPointerMove(e) {
     const dx = pt.x - drag.start.x;
     const dy = pt.y - drag.start.y;
     const o = drag.orig;
-    if (a.type === "circle") {
+    if (a.type === "circle" || a.type === "tri") {
       a.cx = clamp(o.cx + dx, 0, W); a.cy = clamp(o.cy + dy, 0, H);
     } else if (a.type === "rect") {
       a.x = clamp(o.x + dx, -a.w / 2, W - a.w / 2);
@@ -1909,11 +2039,26 @@ function onPointerMove(e) {
       drag.moved = true;
       if (!drag.undoPushed) { pushUndo(); drag.undoPushed = true; }
     }
-    if (a.type === "circle" && drag.role === "resize") {
+    if ((a.type === "circle" || a.type === "tri") && drag.role === "resize") {
       a.r = clamp(dist({ x: a.cx, y: a.cy }, pt), 1, Math.max(W, H));
     } else if (a.type === "rect" && drag.role === "resize") {
-      a.w = clamp(pt.x - a.x, 1.5, W);
-      a.h = clamp(pt.y - a.y, 1.5, H);
+      // 回転中の四角形は、ポインタ座標を回転前の座標系に戻してから幅・高さを計算する
+      const c = { x: drag.orig.x + drag.orig.w / 2, y: drag.orig.y + drag.orig.h / 2 };
+      const p = a.rot ? rotatePt(pt.x, pt.y, c.x, c.y, -a.rot) : pt;
+      a.w = clamp(p.x - a.x, 1.5, W);
+      a.h = clamp(p.y - a.y, 1.5, H);
+    } else if (drag.role === "rotate" && (a.type === "rect" || a.type === "tri")) {
+      const c = annoCenter(a);
+      const ang = (Math.atan2(pt.y - c.y, pt.x - c.x) * 180) / Math.PI;
+      if (drag.rotStartAngle === undefined) {
+        drag.rotStartAngle = ang;
+        drag.rotBase = drag.orig.rot || 0;
+      }
+      let rot = Math.round(drag.rotBase + (ang - drag.rotStartAngle));
+      rot = ((rot % 360) + 360) % 360;
+      const snapped = Math.round(rot / 45) * 45; // 45度の倍数付近では吸着させる
+      if (Math.abs(snapped - rot) <= 4) rot = snapped % 360;
+      a.rot = rot;
     } else if (a.type === "arrow") {
       const px = clamp(pt.x, 0, W), py = clamp(pt.y, 0, H);
       if (drag.role === "p1") { a.x1 = px; a.y1 = py; }
@@ -1926,7 +2071,7 @@ function onPointerMove(e) {
     if (!a) return;
     drag.moved = true;
     const px = clamp(pt.x, 0, W), py = clamp(pt.y, 0, H);
-    if (a.type === "circle") {
+    if (a.type === "circle" || a.type === "tri") {
       a.r = clamp(dist({ x: a.cx, y: a.cy }, { x: px, y: py }), 0.4, Math.max(W, H));
     } else if (a.type === "rect") {
       a.x = Math.min(drag.start.x, px);
@@ -1964,6 +2109,8 @@ function onPointerUp(e) {
       // タップだけ（ドラッグなし）の場合はデフォルトサイズで置く
       if (a.type === "circle" && a.r < 1.5) {
         a.r = 5.5;
+      } else if (a.type === "tri" && a.r < 1.5) {
+        a.r = 6;
       } else if (a.type === "rect" && (a.w < 1.5 || a.h < 1.5)) {
         a.w = 12; a.h = 9;
         a.x = clamp(d.start.x - 6, 0, W - 12);
@@ -2303,10 +2450,10 @@ function init() {
   renderSavesList();
   updateUndoUI();
 
-  // PC では全パネルを開き、スマホではコマ一覧だけ開く
+  // PC では全パネルを開き、スマホではコマ一覧だけ開く（設定パネルは常に閉じたまま）
   const wide = window.innerWidth > 900;
   document.querySelectorAll("details.panel").forEach((d) => {
-    d.open = wide || d.id === "panel-frames";
+    d.open = (wide && d.id !== "panel-settings") || d.id === "panel-frames";
   });
 
   // PWA（https で開いた場合のみ）
