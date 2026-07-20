@@ -101,6 +101,7 @@ svg#board {
   width: 100%;
   height: auto;
   max-height: calc(100vh - 240px);
+  max-height: calc(100svh - 240px); /* スマホのURLバー出入りで高さが揺れないよう安定版ビューポートを使う */
   touch-action: none;
   user-select: none;
   border-radius: 6px;
@@ -171,6 +172,79 @@ svg#board {
   border-color: var(--accent-color);
 }
 
+/* ツールのドロップダウングループ（図形・コーン/マーカー） */
+.tool-dd {
+  position: relative;
+}
+
+.dd-caret {
+  font-size: 0.6rem;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+.dd-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: #101826;
+  border: 1px solid var(--border-panel);
+  border-radius: 12px;
+  padding: 0.3rem;
+  box-shadow: var(--shadow-lg);
+  min-width: 165px;
+}
+
+/* display:flex が hidden 属性より優先されてメニューが閉じなくなるのを防ぐ */
+.dd-menu[hidden] {
+  display: none;
+}
+
+/* メニュー項目はアイコン列＋ラベル列で左揃えにする（絵文字と記号の幅差を吸収）。
+   ボタンはdisplay:flexでも中央寄せになるブラウザがあるためflex-startを明示する */
+.dd-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
+  text-align: left;
+}
+
+.dd-ico {
+  width: 1.5em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* 配布用URL（設定パネル） */
+#app-url {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* 狭い画面ではツールボタンをアイコンだけにし、余白も詰めて1行に収める */
+@media (max-width: 640px) {
+  .btn-label {
+    display: none;
+  }
+  .toolbar {
+    gap: 0.3rem 0.4rem;
+  }
+  .tool-group {
+    gap: 0.2rem;
+    padding: 0.2rem;
+  }
+  .toolbar button {
+    min-height: 36px;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.86rem;
+  }
+}
+
 /* 色見本は正方形のチップ。.toolbar button のtransparent背景より
    確実に優先させるため .swatch-group .swatch という2クラスのセレクタで指定する */
 .swatch {
@@ -199,6 +273,24 @@ svg#board {
 /* button.active の緑背景に負けないよう、選択中も本来の色見本を表示する */
 .swatch-group .swatch.active {
   background: var(--swatch-c);
+}
+
+/* テスト版の目印（deploy_test.ps1 が body に data-env="test" を付けたときだけ表示） */
+body[data-env="test"]::before {
+  content: "テスト版";
+  position: fixed;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.9;
 }
 
 /* ---------- 設定パネル ---------- */

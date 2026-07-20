@@ -24,23 +24,40 @@
       <!-- ツールバー -->
       <div class="toolbar">
         <div class="tool-group">
-          <button data-tool="select" class="tool-btn active" title="選択・移動">☝ 選択</button>
-          <button data-tool="circle" class="tool-btn" title="サークルを描く">◯</button>
-          <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢</button>
-          <button data-tool="tri" class="tool-btn" title="三角形を描く">△</button>
-          <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→ パス</button>
-          <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢ 走路</button>
-          <button data-tool="line" class="tool-btn" title="ライン（直線）">― ライン</button>
+          <button data-tool="select" class="tool-btn active" title="選択・移動">☝<span class="btn-label"> 選択</span></button>
+          <div class="tool-dd">
+            <button class="tool-btn dd-toggle" data-dd="shapes" title="図形（サークル・スクエア・トライアングル・コーン・マーカー）">図形<span class="dd-caret">▾</span></button>
+            <div class="dd-menu" data-dd-menu="shapes" hidden>
+              <button data-tool="circle" class="tool-btn" title="サークルを描く"><span class="dd-ico">◯</span>サークル</button>
+              <button data-tool="rect" class="tool-btn" title="スクエアを描く"><span class="dd-ico">▢</span>スクエア</button>
+              <button data-tool="tri" class="tool-btn" title="トライアングルを描く"><span class="dd-ico">△</span>トライアングル</button>
+              <button data-tool="cone" class="tool-btn" title="コーンを置く"><span class="dd-ico">🔺</span>コーン</button>
+              <button data-tool="marker" class="tool-btn" title="マーカーを置く"><span class="dd-ico">🟡</span>マーカー</button>
+            </div>
+          </div>
+          <div class="tool-dd">
+            <button class="tool-btn dd-toggle" data-dd="arrows" title="矢印・ライン（パス・走路・ライン）">矢印<span class="dd-caret">▾</span></button>
+            <div class="dd-menu" data-dd-menu="arrows" hidden>
+              <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）"><span class="dd-ico">→</span>パス（実線）</button>
+              <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）"><span class="dd-ico">⇢</span>走路（破線）</button>
+              <button data-tool="line" class="tool-btn" title="ライン（直線）"><span class="dd-ico">―</span>ライン（直線）</button>
+            </div>
+          </div>
         </div>
         <div class="tool-group">
-          <button id="btn-undo" title="ひとつ戻す" disabled>↩ 戻す</button>
-          <button id="btn-clear-annos" title="図形をすべて削除">🗑 図形</button>
+          <button id="btn-undo" title="ひとつ戻す" disabled>↩<span class="btn-label"> 戻す</span></button>
+          <button id="btn-clear-annos" title="図形をすべて削除">🗑<span class="btn-label"> 図形</span></button>
         </div>
         <div class="tool-group">
-          <button data-court="full" class="court-btn active">フル</button>
-          <button data-court="half" class="court-btn">半面</button>
-          <button data-court="blank" class="court-btn">無地</button>
-          <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
+          <div class="tool-dd">
+            <button class="dd-toggle" id="dd-court-toggle" data-dd="court" title="コートの種類">フル<span class="dd-caret">▾</span></button>
+            <div class="dd-menu" data-dd-menu="court" hidden>
+              <button data-court="full" class="court-btn active">フルコート</button>
+              <button data-court="half" class="court-btn">半面コート</button>
+              <button data-court="blank" class="court-btn">無地コート</button>
+            </div>
+          </div>
+          <button id="btn-orientation" title="コートの縦横を切り替え">🔄<span class="btn-label"> 縦横</span></button>
         </div>
         <div class="tool-group" id="half-facing-group" hidden>
           <button data-facing="left" class="facing-btn active" title="左へ攻める（ゴールは右）">⬅</button>
@@ -223,6 +240,17 @@
               <button class="swatch" data-theme="classic" title="ダークグリーン" style="--swatch-c:#14381d"></button>
             </div>
           </div>
+          <div class="settings-row">
+            <span class="settings-label">アプリのURL（配布用）</span>
+          </div>
+          <div class="save-row">
+            <input id="app-url" readonly>
+            <button id="btn-copy-url">コピー</button>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">バージョン</span>
+            <span class="settings-label" id="app-version"></span>
+          </div>
         </div>
       </details>
 
@@ -232,8 +260,9 @@
           <ul>
             <li>選手・ボールはドラッグで動かせます。ボールの近くの選手を動かすとボールも一緒に動きます。</li>
             <li>選手をタップすると番号とラベル（名前・役割）を変えられます。</li>
-            <li>◯・▢・△・矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
-            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。▢と△は緑色のハンドルをドラッグすると回転できます。</li>
+            <li>「図形」メニュー（サークル・スクエア・トライアングル・コーン・マーカー）か矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると描けます。図形は全コマ共通です。</li>
+            <li>コーンとマーカーはタップした場所に置けます。置いた後もドラッグで移動でき、青い複製ボタンで同じものを増やせます。</li>
+            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。スクエアとトライアングルは緑色のハンドルをドラッグすると回転できます。</li>
             <li>選手やボールをコマ間で動かすと、その移動が自動でパス（実線）・走路（破線）の矢印として表示されます。</li>
             <li>芝の色はサイドパネルの「⚙ 設定」で切り替えられます。</li>
             <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。コマ一覧の下の欄に、そのコマのメモ（やることなど）を書き込めます。</li>
