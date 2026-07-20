@@ -725,7 +725,9 @@ function pentagonPoints(cx, cy, r, rotDeg) {
   return pts.join(" ");
 }
 
-/* 定番のサッカーボール柄（中央の黒五角形＋周囲5枚の黒五角形を円でクリップ） */
+/* 定番のサッカーボール柄。実物と同じ「中央に黒五角形→それを囲む白い六角形の輪→
+   ボールの縁で切れる黒五角形」の構成にする（六角形は縁取り線だけで内側は素地の白のまま）。
+   円でクリップして縁の五角形が自然に切れて見えるようにする */
 function buildBallPattern(rb) {
   const g = el("g", { "pointer-events": "none" });
   const defs = el("defs", null, g);
@@ -733,25 +735,44 @@ function buildBallPattern(rb) {
   el("circle", { cx: 0, cy: 0, r: rb * 0.99 }, clip);
 
   const pat = el("g", { "clip-path": "url(#ball-pattern-clip)" }, g);
-  const pentR = rb * 0.42;
-  const satPentR = pentR * 0.86; // 周辺の五角形は中央より少し小さく
-  const satDist = rb * 0.8;
+  const dark = "#20242b";
+  // ballR()は画面上ほぼ常に9px固定（9/pxPerMeter()）なので、比率だけだと縫い目線が
+  // 実機で1px未満になり見えなくなる。画面上で最低1px強は確保する
+  const seam = Math.max(rb * 0.06, 1.1 / pxPerMeter());
 
-  el("polygon", { points: pentagonPoints(0, 0, pentR, -90), fill: "#20242b" }, pat);
+  const pentR = rb * 0.30;   // 中央の黒五角形
+  const hexDist = rb * 0.60; // 六角形の中心までの距離
+  const hexR = rb * 0.30;    // 六角形の頂点までの距離（中央五角形の頂点と揃う）
+  const rimDist = rb * 0.80; // 縁の五角形の中心までの距離
+  const rimR = rb * 0.32;    // 縁の五角形の大きさ（円の外まではみ出してクリップされる）
+
+  el("polygon", {
+    points: pentagonPoints(0, 0, pentR, -90), fill: dark,
+    stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
+  }, pat);
+
   for (let k = 0; k < 5; k++) {
     const ang = -90 + 36 + k * 72;
-    const cx = satDist * Math.cos(ang * Math.PI / 180);
-    const cy = satDist * Math.sin(ang * Math.PI / 180);
-    el("polygon", { points: pentagonPoints(cx, cy, satPentR, ang + 180), fill: "#20242b" }, pat);
+    const cx = hexDist * Math.cos(ang * Math.PI / 180);
+    const cy = hexDist * Math.sin(ang * Math.PI / 180);
+    const pts = [];
+    for (let j = 0; j < 6; j++) {
+      const a = (ang + 180 + j * 60) * Math.PI / 180;
+      pts.push(`${(cx + hexR * Math.cos(a)).toFixed(3)},${(cy + hexR * Math.sin(a)).toFixed(3)}`);
+    }
+    el("polygon", {
+      points: pts.join(" "), fill: "none",
+      stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
+    }, pat);
   }
-  // 継ぎ目風の薄い線
+
   for (let k = 0; k < 5; k++) {
-    const a1 = (-90 + k * 72) * Math.PI / 180;
-    const a2 = (-90 + 36 + k * 72) * Math.PI / 180;
-    el("line", {
-      x1: (pentR * Math.cos(a1)).toFixed(2), y1: (pentR * Math.sin(a1)).toFixed(2),
-      x2: (satDist * 0.42 * Math.cos(a2)).toFixed(2), y2: (satDist * 0.42 * Math.sin(a2)).toFixed(2),
-      stroke: "#8a9099", "stroke-width": Math.max(0.05, rb * 0.03),
+    const ang = -90 + k * 72;
+    const cx = rimDist * Math.cos(ang * Math.PI / 180);
+    const cy = rimDist * Math.sin(ang * Math.PI / 180);
+    el("polygon", {
+      points: pentagonPoints(cx, cy, rimR, ang), fill: dark,
+      stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
     }, pat);
   }
   return g;
