@@ -740,11 +740,12 @@ function buildBallPattern(rb) {
   // 実機で1px未満になり見えなくなる。画面上で最低1px強は確保する
   const seam = Math.max(rb * 0.06, 1.1 / pxPerMeter());
 
-  const pentR = rb * 0.30;   // 中央の黒五角形
-  const hexDist = rb * 0.60; // 六角形の中心までの距離
-  const hexR = rb * 0.30;    // 六角形の頂点までの距離（中央五角形の頂点と揃う）
-  const rimDist = rb * 0.80; // 縁の五角形の中心までの距離
-  const rimR = rb * 0.32;    // 縁の五角形の大きさ（円の外まではみ出してクリップされる）
+  const pentR = rb * 0.21;    // 中央の黒五角形
+  const hexDist = rb * 0.58;  // 六角形の中心までの距離
+  const hexR = rb * 0.28;     // 六角形の頂点までの距離（中央五角形の頂点と揃う）
+  const rimInnerR = rb * 0.68; // 縁のくさび形の内側の先端
+  const rimOuterR = rb * 1.05; // 縁のくさび形の外側（円の外まで伸ばしてクリップさせる）
+  const rimHalfAngle = 11;     // くさび形の開き角度（片側、度）。実物の五角形の縁の切れ端を模す
 
   el("polygon", {
     points: pentagonPoints(0, 0, pentR, -90), fill: dark,
@@ -766,12 +767,20 @@ function buildBallPattern(rb) {
     }, pat);
   }
 
+  // ボールの縁で切れて見える黒五角形の断片。正五角形だと隣の六角形まで食い込んで
+  // 黒が多くなりすぎるため、外側だけ細く見えるくさび形（三角形）で表現する
   for (let k = 0; k < 5; k++) {
     const ang = -90 + k * 72;
-    const cx = rimDist * Math.cos(ang * Math.PI / 180);
-    const cy = rimDist * Math.sin(ang * Math.PI / 180);
+    const a1 = ((ang - rimHalfAngle) * Math.PI) / 180;
+    const a2 = ((ang + rimHalfAngle) * Math.PI) / 180;
+    const a0 = (ang * Math.PI) / 180;
+    const pts = [
+      `${(rimInnerR * Math.cos(a0)).toFixed(3)},${(rimInnerR * Math.sin(a0)).toFixed(3)}`,
+      `${(rimOuterR * Math.cos(a1)).toFixed(3)},${(rimOuterR * Math.sin(a1)).toFixed(3)}`,
+      `${(rimOuterR * Math.cos(a2)).toFixed(3)},${(rimOuterR * Math.sin(a2)).toFixed(3)}`,
+    ];
     el("polygon", {
-      points: pentagonPoints(cx, cy, rimR, ang), fill: dark,
+      points: pts.join(" "), fill: dark,
       stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
     }, pat);
   }
