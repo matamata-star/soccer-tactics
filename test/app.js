@@ -8,6 +8,7 @@
    ========================================================= */
 
 const APP_VERSION = "0.1"; // 版数（⚙設定パネルに表示。リリースごとに更新する）
+const APP_URL = "https://matamata-star.github.io/soccer-tactics/"; // 配布用の本番URL（設定パネルに表示）
 
 /* ---------- コート定義 ---------- */
 const COURTS = {
@@ -1910,7 +1911,11 @@ function setTool(tool) {
 }
 
 /* ツールバーのドロップダウングループ定義 */
-const DD_GROUPS = { shapes: ["circle", "rect", "tri", "cone", "marker"] };
+const DD_GROUPS = {
+  shapes: ["circle", "rect", "tri", "cone", "marker"],
+  arrows: ["arrow-pass", "arrow-run", "line"],
+};
+const COURT_NAMES = { full: "フル", half: "半面", blank: "無地" };
 
 function updateToolbarUI() {
   document.querySelectorAll("[data-tool]").forEach((b) => {
@@ -1920,6 +1925,9 @@ function updateToolbarUI() {
     const tools = DD_GROUPS[btn.dataset.dd] || [];
     btn.classList.toggle("active", tools.includes(state.tool));
   });
+  // コートのドロップダウンは現在のコート名を表示する
+  const courtToggle = $("dd-court-toggle");
+  if (courtToggle) courtToggle.firstChild.nodeValue = COURT_NAMES[state.courtType] || "コート";
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.classList.toggle("active", b.dataset.court === state.courtType);
   });
@@ -2307,11 +2315,33 @@ function setupEventListeners() {
       menu.hidden = !willOpen;
     });
   });
-  document.querySelectorAll(".dd-menu [data-tool]").forEach((b) => {
-    b.addEventListener("click", closeAllDD); // ツール選択自体は上の共通リスナーが行う
+  document.querySelectorAll(".dd-menu button").forEach((b) => {
+    b.addEventListener("click", closeAllDD); // ツール/コート選択自体は各共通リスナーが行う
   });
   document.addEventListener("pointerdown", (e) => {
     if (!e.target.closest || !e.target.closest(".tool-dd")) closeAllDD();
+  });
+
+  // 配布用URLのコピー
+  $("btn-copy-url").addEventListener("click", async () => {
+    const btn = $("btn-copy-url");
+    let ok = false;
+    try {
+      await navigator.clipboard.writeText(APP_URL);
+      ok = true;
+    } catch (e) {
+      // 古いブラウザ・非https向けのフォールバック（readonlyのままだと選択できない端末があるため一時解除）
+      const inp = $("app-url");
+      inp.removeAttribute("readonly");
+      inp.select();
+      inp.setSelectionRange(0, inp.value.length);
+      try { ok = document.execCommand("copy"); } catch (e2) {}
+      inp.setAttribute("readonly", "");
+      const sel = window.getSelection();
+      if (sel) sel.removeAllRanges();
+    }
+    btn.textContent = ok ? "コピーしました" : "コピー失敗";
+    setTimeout(() => { btn.textContent = "コピー"; }, 1600);
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.addEventListener("click", () => setCourtType(b.dataset.court));
@@ -2580,6 +2610,7 @@ function init() {
   });
 
   $("app-version").textContent = APP_VERSION;
+  $("app-url").value = APP_URL;
 
   // PWA（https で開いた場合のみ。テスト版ではキャッシュ混在を避けるため登録しない）
   if ("serviceWorker" in navigator && location.protocol.startsWith("http") && document.body.dataset.env !== "test") {

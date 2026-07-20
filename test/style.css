@@ -204,14 +204,44 @@ svg#board {
   display: none;
 }
 
+/* メニュー項目はアイコン列＋ラベル列で左揃えにする（絵文字と記号の幅差を吸収）。
+   ボタンはdisplay:flexでも中央寄せになるブラウザがあるためflex-startを明示する */
 .dd-menu button {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.5rem;
   text-align: left;
 }
 
-/* 狭い画面ではツールボタンをアイコンだけにして1行に収める */
+.dd-ico {
+  width: 1.5em;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* 配布用URL（設定パネル） */
+#app-url {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+/* 狭い画面ではツールボタンをアイコンだけにし、余白も詰めて1行に収める */
 @media (max-width: 640px) {
   .btn-label {
     display: none;
+  }
+  .toolbar {
+    gap: 0.3rem 0.4rem;
+  }
+  .tool-group {
+    gap: 0.2rem;
+    padding: 0.2rem;
+  }
+  .toolbar button {
+    min-height: 36px;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.86rem;
   }
 }
 
