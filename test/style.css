@@ -101,6 +101,7 @@ svg#board {
   width: 100%;
   height: auto;
   max-height: calc(100vh - 240px);
+  max-height: calc(100svh - 240px); /* スマホのURLバー出入りで高さが揺れないよう安定版ビューポートを使う */
   touch-action: none;
   user-select: none;
   border-radius: 6px;
@@ -195,7 +196,12 @@ svg#board {
   border-radius: 12px;
   padding: 0.3rem;
   box-shadow: var(--shadow-lg);
-  min-width: 150px;
+  min-width: 165px;
+}
+
+/* display:flex が hidden 属性より優先されてメニューが閉じなくなるのを防ぐ */
+.dd-menu[hidden] {
+  display: none;
 }
 
 .dd-menu button {

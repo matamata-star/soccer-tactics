@@ -275,6 +275,10 @@ function benchDragMargin() {
 }
 
 /* ---------- ビューボックス / 向き ---------- */
+/* コートの高さ計算に使う「安定した画面の高さ」。スマホのURLバー出入り（高さだけの変化）では
+   更新せず、画面幅が変わったとき（回転・実リサイズ）だけリサイズハンドラが更新する */
+let stableViewportH = window.innerHeight;
+
 function applyViewBox() {
   const { W, H } = court();
   const { portrait, flip } = effectiveOrientation();
@@ -299,12 +303,14 @@ function applyViewBox() {
   else scene.removeAttribute("transform");
   svg.style.aspectRatio = `${vw} / ${vh}`;
 
-  // 高さ制限に収まるよう幅も明示的に絞る（レターボックスの余白をなくす）
+  // 高さ制限に収まるよう幅も明示的に絞る（レターボックスの余白をなくす）。
+  // スマホのスクロールでURLバーが出入りするとinnerHeightが揺れてコートが伸縮して見えるため、
+  // 画面幅が変わったときだけ更新する「安定した高さ」(stableViewportH)を使う
   svg.style.width = "100%";
   const availW = svg.getBoundingClientRect().width;
   const maxH = window.innerWidth <= 900
-    ? window.innerHeight * 0.66
-    : window.innerHeight - 240;
+    ? stableViewportH * 0.66
+    : stableViewportH - 240;
   const w = Math.min(availW, Math.max(200, maxH) * (vw / vh));
   if (w < availW) svg.style.width = `${Math.round(w)}px`;
 }
@@ -436,6 +442,12 @@ function annoCenter(a) {
   return { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 };
 }
 
+/* 縦表示でsceneが回転していても図形が画面上で同じ向きに見えるようにするための逆回転角（度）。
+   図形は左右対称なのでflip（半面コートの反転）は打ち消さなくても見た目が崩れない */
+function annoCounterRot() {
+  return effectiveOrientation().portrait ? -90 : 0;
+}
+
 /* 正三角形の3頂点（rot=0で頂点が上）。r は外接円の半径 */
 function triPointsArr(a) {
   return [0, 1, 2].map((i) => {
@@ -465,26 +477,33 @@ function buildAnnoEl(a) {
   if (a.type === "circle") {
     el("circle", { cx: a.cx, cy: a.cy, r: a.r, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw }, g);
   } else if (a.type === "rect") {
+    const cr = annoCounterRot();
+    const eff = (a.rot || 0) + cr;
     el("rect", {
       x: a.x, y: a.y, width: a.w, height: a.h, rx: 0.5, fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw,
-      transform: a.rot ? `rotate(${a.rot} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
+      transform: eff ? `rotate(${eff} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
     }, g);
   } else if (a.type === "tri") {
+    const cr = annoCounterRot();
+    if (cr) g.setAttribute("transform", `rotate(${cr} ${a.cx} ${a.cy})`);
     el("polygon", { points: triPoints(a), fill: "rgba(255,213,74,0.10)", stroke: color, "stroke-width": sw, "stroke-linejoin": "round" }, g);
   } else if (a.type === "cone") {
-    // トレーニング用コーン（オレンジの三角錐＋白帯）。サイズ固定・タップしやすい透明の当たり判定つき
-    const cs = 1.4;
+    // トレーニング用コーン（オレンジの三角錐＋白帯）。選手より少し小さいサイズに追従させる
+    const cr = annoCounterRot();
+    if (cr) g.setAttribute("transform", `rotate(${cr} ${a.x} ${a.y})`);
+    const cs = markerR() * 1.15;
     el("polygon", {
       points: `${a.x},${a.y - cs} ${a.x - cs * 0.75},${a.y + cs * 0.55} ${a.x + cs * 0.75},${a.y + cs * 0.55}`,
       fill: "#ff7a1a", stroke: "#ffffff", "stroke-width": 0.16, "stroke-linejoin": "round",
     }, g);
     el("line", { x1: a.x - cs * 0.38, y1: a.y - cs * 0.05, x2: a.x + cs * 0.38, y2: a.y - cs * 0.05, stroke: "#ffffff", "stroke-width": 0.16 }, g);
-    el("circle", { cx: a.x, cy: a.y, r: 1.8, fill: "transparent" }, g);
+    el("circle", { cx: a.x, cy: a.y, r: Math.max(1.8, cs), fill: "transparent" }, g);
   } else if (a.type === "marker") {
-    // マーカーディスク（黄色の平たい円盤）。サイズ固定
-    el("circle", { cx: a.x, cy: a.y, r: 0.85, fill: "#ffe23e", stroke: "#c99700", "stroke-width": 0.14 }, g);
-    el("circle", { cx: a.x, cy: a.y, r: 0.35, fill: "none", stroke: "#c99700", "stroke-width": 0.12 }, g);
-    el("circle", { cx: a.x, cy: a.y, r: 1.8, fill: "transparent" }, g);
+    // マーカーディスク（黄色の平たい円盤）。選手より少し小さいサイズに追従させる
+    const mr = markerR() * 0.75;
+    el("circle", { cx: a.x, cy: a.y, r: mr, fill: "#ffe23e", stroke: "#c99700", "stroke-width": 0.14 }, g);
+    el("circle", { cx: a.x, cy: a.y, r: mr * 0.4, fill: "none", stroke: "#c99700", "stroke-width": 0.12 }, g);
+    el("circle", { cx: a.x, cy: a.y, r: Math.max(1.8, mr * 1.2), fill: "transparent" }, g);
   } else if (a.type === "arrow") {
     const dash = a.style === "run" ? "1.6 1.2" : null;
     const markerId = a.style === "run" ? "ah-run" : a.style === "pass" ? "ah-pass" : null;
@@ -509,17 +528,24 @@ function renderAnnotations() {
 
 function annoBBox(a) {
   if (a.type === "circle") return { minX: a.cx - a.r, minY: a.cy - a.r, maxX: a.cx + a.r, maxY: a.cy + a.r };
-  if (a.type === "tri") return bboxOfPts(triPointsArr(a));
-  if (a.type === "cone") return { minX: a.x - 1.2, minY: a.y - 1.6, maxX: a.x + 1.2, maxY: a.y + 1.2 };
-  if (a.type === "marker") return { minX: a.x - 1, minY: a.y - 1, maxX: a.x + 1, maxY: a.y + 1 };
+  if (a.type === "tri") {
+    const cr = annoCounterRot();
+    const pts = triPointsArr(a).map((p) => (cr ? rotatePt(p.x, p.y, a.cx, a.cy, cr) : p));
+    return bboxOfPts(pts);
+  }
+  if (a.type === "cone" || a.type === "marker") {
+    const r = Math.max(1.5, markerR() * 1.2); // 向きに関わらず収まる正方形で近似
+    return { minX: a.x - r, minY: a.y - r, maxX: a.x + r, maxY: a.y + r };
+  }
   if (a.type === "rect") {
-    if (!a.rot) return { minX: a.x, minY: a.y, maxX: a.x + a.w, maxY: a.y + a.h };
+    const eff = (a.rot || 0) + annoCounterRot();
+    if (!eff) return { minX: a.x, minY: a.y, maxX: a.x + a.w, maxY: a.y + a.h };
     const c = annoCenter(a);
     const corners = [
-      rotatePt(a.x, a.y, c.x, c.y, a.rot),
-      rotatePt(a.x + a.w, a.y, c.x, c.y, a.rot),
-      rotatePt(a.x, a.y + a.h, c.x, c.y, a.rot),
-      rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, a.rot),
+      rotatePt(a.x, a.y, c.x, c.y, eff),
+      rotatePt(a.x + a.w, a.y, c.x, c.y, eff),
+      rotatePt(a.x, a.y + a.h, c.x, c.y, eff),
+      rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, eff),
     ];
     return bboxOfPts(corners);
   }
@@ -538,18 +564,23 @@ function renderHandles() {
   const hr = handleR();
   const { W, H } = court();
 
-  // 選択中の点線アウトライン
+  // 選択中の点線アウトライン（縦表示の逆回転も図形本体と同じように掛ける）
+  const cr = annoCounterRot();
   if (a.type === "circle") {
     el("circle", { cx: a.cx, cy: a.cy, r: a.r + 0.9, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
   } else if (a.type === "rect") {
+    const effOutline = (a.rot || 0) + cr;
     el("rect", {
       x: a.x - 0.9, y: a.y - 0.9, width: a.w + 1.8, height: a.h + 1.8, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none",
-      transform: a.rot ? `rotate(${a.rot} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
+      transform: effOutline ? `rotate(${effOutline} ${a.x + a.w / 2} ${a.y + a.h / 2})` : null,
     }, L);
   } else if (a.type === "tri") {
-    el("polygon", { points: triPoints({ cx: a.cx, cy: a.cy, r: a.r + 0.9, rot: a.rot }), fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
+    el("polygon", {
+      points: triPoints({ cx: a.cx, cy: a.cy, r: a.r + 0.9, rot: a.rot }), fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none",
+      transform: cr ? `rotate(${cr} ${a.cx} ${a.cy})` : null,
+    }, L);
   } else if (a.type === "cone" || a.type === "marker") {
-    el("circle", { cx: a.x, cy: a.y, r: 2.0, fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
+    el("circle", { cx: a.x, cy: a.y, r: Math.max(2.0, markerR() * 1.3), fill: "none", stroke: "rgba(255,255,255,0.7)", "stroke-width": 0.18, "stroke-dasharray": "1 1", "pointer-events": "none" }, L);
   }
 
   const mkHandle = (x, y, role, fillColor) => {
@@ -564,14 +595,16 @@ function renderHandles() {
     mkHandle(a.cx + a.r, a.cy, "resize");
   } else if (a.type === "rect") {
     const c = annoCenter(a);
-    const br = rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, a.rot || 0);
+    const eff = (a.rot || 0) + cr;
+    const br = rotatePt(a.x + a.w, a.y + a.h, c.x, c.y, eff);
     mkHandle(br.x, br.y, "resize");
-    rotHandlePos = rotatePt(c.x, a.y - 2.4, c.x, c.y, a.rot || 0);
+    rotHandlePos = rotatePt(c.x, a.y - 2.4, c.x, c.y, eff);
     mkHandle(rotHandlePos.x, rotHandlePos.y, "rotate", "#10b981"); // 緑＝回転ハンドル
   } else if (a.type === "tri") {
-    const v = triPointsArr(a)[1]; // 右下の頂点＝サイズ変更
+    const v0 = triPointsArr(a)[1]; // 右下の頂点＝サイズ変更
+    const v = cr ? rotatePt(v0.x, v0.y, a.cx, a.cy, cr) : v0;
     mkHandle(v.x, v.y, "resize");
-    const angA = (((a.rot || 0) - 90) * Math.PI) / 180; // 頂点方向の先＝回転
+    const angA = (((a.rot || 0) - 90 + cr) * Math.PI) / 180; // 頂点方向の先＝回転
     const rd = a.r + 2.4;
     rotHandlePos = { x: a.cx + rd * Math.cos(angA), y: a.cy + rd * Math.sin(angA) };
     mkHandle(rotHandlePos.x, rotHandlePos.y, "rotate", "#10b981");
@@ -1876,9 +1909,8 @@ function setTool(tool) {
   updateToolbarUI();
 }
 
-/* ツールバーのドロップダウングループ定義（ボタンのアイコンは直近に選んだツールを表示する） */
-const DD_GROUPS = { shapes: ["circle", "rect", "tri"], equip: ["cone", "marker"] };
-const DD_ICONS = { circle: "◯", rect: "▢", tri: "△", cone: "🔺", marker: "🟡" };
+/* ツールバーのドロップダウングループ定義 */
+const DD_GROUPS = { shapes: ["circle", "rect", "tri", "cone", "marker"] };
 
 function updateToolbarUI() {
   document.querySelectorAll("[data-tool]").forEach((b) => {
@@ -1886,9 +1918,7 @@ function updateToolbarUI() {
   });
   document.querySelectorAll(".dd-toggle").forEach((btn) => {
     const tools = DD_GROUPS[btn.dataset.dd] || [];
-    const active = tools.includes(state.tool);
-    btn.classList.toggle("active", active);
-    if (active) btn.firstChild.nodeValue = DD_ICONS[state.tool];
+    btn.classList.toggle("active", tools.includes(state.tool));
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.classList.toggle("active", b.dataset.court === state.courtType);
@@ -2109,9 +2139,10 @@ function onPointerMove(e) {
     if ((a.type === "circle" || a.type === "tri") && drag.role === "resize") {
       a.r = clamp(dist({ x: a.cx, y: a.cy }, pt), 1, Math.max(W, H));
     } else if (a.type === "rect" && drag.role === "resize") {
-      // 回転中の四角形は、ポインタ座標を回転前の座標系に戻してから幅・高さを計算する
+      // 回転中の四角形は、ポインタ座標を画面上の実回転（縦表示の逆回転込み）の前に戻してから幅・高さを計算する
       const c = { x: drag.orig.x + drag.orig.w / 2, y: drag.orig.y + drag.orig.h / 2 };
-      const p = a.rot ? rotatePt(pt.x, pt.y, c.x, c.y, -a.rot) : pt;
+      const eff = (a.rot || 0) + annoCounterRot();
+      const p = eff ? rotatePt(pt.x, pt.y, c.x, c.y, -eff) : pt;
       a.w = clamp(p.x - a.x, 1.5, W);
       a.h = clamp(p.y - a.y, 1.5, H);
     } else if (drag.role === "rotate" && (a.type === "rect" || a.type === "tri")) {
@@ -2497,11 +2528,16 @@ function setupEventListeners() {
     }
   });
 
-  // リサイズ（縦横の自動追従）
+  // リサイズ（縦横の自動追従）。スマホのスクロールによるURLバーの出入りは
+  // 高さしか変えないため無視し、幅が変わったとき（回転や実際のリサイズ）だけ再レイアウトする
   let resizeTimer = null;
+  let lastViewportW = window.innerWidth;
   window.addEventListener("resize", () => {
     clearTimeout(resizeTimer);
     resizeTimer = setTimeout(() => {
+      if (window.innerWidth === lastViewportW) return;
+      lastViewportW = window.innerWidth;
+      stableViewportH = window.innerHeight;
       if (!state.orientationManual) {
         state.portrait = window.innerHeight > window.innerWidth;
       }
