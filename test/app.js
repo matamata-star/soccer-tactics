@@ -725,9 +725,13 @@ function pentagonPoints(cx, cy, r, rotDeg) {
   return pts.join(" ");
 }
 
-/* 定番のサッカーボール柄。実物と同じ「中央に黒五角形→それを囲む白い六角形の輪→
-   ボールの縁で切れる黒五角形」の構成にする（六角形は縁取り線だけで内側は素地の白のまま）。
-   円でクリップして縁の五角形が自然に切れて見えるようにする */
+/* 定番のサッカーボール柄（切頂二十面体を正面から見た図）。
+   実物と同じ隣接ルールで作図する:
+   - 五角形の辺は必ず六角形の辺と共有される
+   - 六角形の周りは「六・五・六・五・六・五」の交互
+   構成: 中央の黒五角形 → その5辺と辺を共有する白い六角形×5（六角形同士も
+   放射線上の辺B-Fを完全共有）→ 中央五角形の頂点方向に、隣り合う2つの六角形の
+   外側の辺（F-E・C-D）を共有する縁の黒五角形×5（円形クリップで縁が切れて見える） */
 function buildBallPattern(rb) {
   const g = el("g", { "pointer-events": "none" });
   const defs = el("defs", null, g);
@@ -738,50 +742,50 @@ function buildBallPattern(rb) {
   const dark = "#20242b";
   // ballR()は画面上ほぼ常に9px固定（9/pxPerMeter()）なので、比率だけだと縫い目線が
   // 実機で1px未満になり見えなくなる。画面上で最低1px強は確保する
-  const seam = Math.max(rb * 0.06, 1.1 / pxPerMeter());
+  const seam = Math.max(rb * 0.045, 1.1 / pxPerMeter());
+  const D2R = Math.PI / 180;
+  const u = (deg) => [Math.cos(deg * D2R), Math.sin(deg * D2R)];
+  const fmt = (pt) => `${pt[0].toFixed(3)},${pt[1].toFixed(3)}`;
 
-  const pentR = rb * 0.21;    // 中央の黒五角形
-  const hexDist = rb * 0.58;  // 六角形の中心までの距離
-  const hexR = rb * 0.28;     // 六角形の頂点までの距離（中央五角形の頂点と揃う）
-  const rimInnerR = rb * 0.68; // 縁のくさび形の内側の先端
-  const rimOuterR = rb * 1.05; // 縁のくさび形の外側（円の外まで伸ばしてクリップさせる）
-  const rimHalfAngle = 11;     // くさび形の開き角度（片側、度）。実物の五角形の縁の切れ端を模す
+  const add = (P, dir, len) => [P[0] + len * dir[0], P[1] + len * dir[1]];
+  const p = rb * 0.32;                  // 中央五角形の外接円半径（頂点が上）
+  const s = 2 * p * Math.sin(36 * D2R); // 全パネル共通の辺の長さ
 
+  // 中央の黒五角形
   el("polygon", {
-    points: pentagonPoints(0, 0, pentR, -90), fill: dark,
+    points: pentagonPoints(0, 0, p, -90), fill: dark,
     stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
   }, pat);
 
+  // 白い六角形×5。頂点A,Bは中央五角形の頂点、F,Cは頂点方向（放射線上）の延長にあり、
+  // A-B辺は中央五角形と、B-F/C-A辺は隣の六角形とそれぞれ完全に辺を共有する
   for (let k = 0; k < 5; k++) {
-    const ang = -90 + 36 + k * 72;
-    const cx = hexDist * Math.cos(ang * Math.PI / 180);
-    const cy = hexDist * Math.sin(ang * Math.PI / 180);
-    const pts = [];
-    for (let j = 0; j < 6; j++) {
-      const a = (ang + 180 + j * 60) * Math.PI / 180;
-      pts.push(`${(cx + hexR * Math.cos(a)).toFixed(3)},${(cy + hexR * Math.sin(a)).toFixed(3)}`);
-    }
+    const phi = -90 + 36 + k * 72; // 五角形の辺の外向き（六角形の中心方向）
+    const t1 = phi - 36;           // 五角形の頂点方向（片側）
+    const t2 = phi + 36;           // 五角形の頂点方向（もう片側）
+    const A = [p * u(t2)[0], p * u(t2)[1]];
+    const B = [p * u(t1)[0], p * u(t1)[1]];
+    const F = [(p + s) * u(t1)[0], (p + s) * u(t1)[1]];
+    const C = [(p + s) * u(t2)[0], (p + s) * u(t2)[1]];
+    const E = add(F, u(phi + 36), s);
+    const D = add(C, u(phi - 36), s);
     el("polygon", {
-      points: pts.join(" "), fill: "none",
+      points: [A, B, F, E, D, C].map(fmt).join(" "), fill: "none",
       stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
     }, pat);
   }
 
-  // ボールの縁で切れて見える黒五角形の断片。正五角形だと隣の六角形まで食い込んで
-  // 黒が多くなりすぎるため、外側だけ細く見えるくさび形（三角形）で表現する
+  // 縁の黒五角形×5（中央五角形の頂点方向）。隣り合う2つの六角形の外側の辺
+  // （F-EとC-D）と辺を共有し、円形クリップでボールの縁が切れて見える
   for (let k = 0; k < 5; k++) {
-    const ang = -90 + k * 72;
-    const a1 = ((ang - rimHalfAngle) * Math.PI) / 180;
-    const a2 = ((ang + rimHalfAngle) * Math.PI) / 180;
-    const a0 = (ang * Math.PI) / 180;
-    const pts = [
-      `${(rimInnerR * Math.cos(a0)).toFixed(3)},${(rimInnerR * Math.sin(a0)).toFixed(3)}`,
-      `${(rimOuterR * Math.cos(a1)).toFixed(3)},${(rimOuterR * Math.sin(a1)).toFixed(3)}`,
-      `${(rimOuterR * Math.cos(a2)).toFixed(3)},${(rimOuterR * Math.sin(a2)).toFixed(3)}`,
-    ];
+    const th = -90 + 72 * k;
+    const F = [(p + s) * u(th)[0], (p + s) * u(th)[1]];
+    const ER = add(F, u(th + 72), s); // 片側の六角形のF-E辺の先端
+    const DL = add(F, u(th - 72), s); // もう片側の六角形のC-D辺の先端
+    const M = [1.6 * rb * u(th)[0], 1.6 * rb * u(th)[1]];
     el("polygon", {
-      points: pts.join(" "), fill: dark,
-      stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
+      points: [ER, F, DL, M].map(fmt).join(" "),
+      fill: dark, stroke: dark, "stroke-width": seam, "stroke-linejoin": "round",
     }, pat);
   }
   return g;
