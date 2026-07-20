@@ -24,25 +24,35 @@
       <!-- ツールバー -->
       <div class="toolbar">
         <div class="tool-group">
-          <button data-tool="select" class="tool-btn active" title="選択・移動">☝ 選択</button>
-          <button data-tool="circle" class="tool-btn" title="サークルを描く">◯</button>
-          <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢</button>
-          <button data-tool="tri" class="tool-btn" title="三角形を描く">△</button>
-          <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→ パス</button>
-          <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢ 走路</button>
-          <button data-tool="line" class="tool-btn" title="ライン（直線）">― ライン</button>
-          <button data-tool="cone" class="tool-btn" title="コーンを置く">🔺</button>
-          <button data-tool="marker" class="tool-btn" title="マーカーを置く">🟡</button>
+          <button data-tool="select" class="tool-btn active" title="選択・移動">☝<span class="btn-label"> 選択</span></button>
+          <div class="tool-dd">
+            <button class="tool-btn dd-toggle" data-dd="shapes" title="図形（サークル・スクエア・三角形）">◯<span class="dd-caret">▾</span></button>
+            <div class="dd-menu" data-dd-menu="shapes" hidden>
+              <button data-tool="circle" class="tool-btn" title="サークルを描く">◯ サークル</button>
+              <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢ スクエア</button>
+              <button data-tool="tri" class="tool-btn" title="三角形を描く">△ 三角形</button>
+            </div>
+          </div>
+          <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→<span class="btn-label"> パス</span></button>
+          <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢<span class="btn-label"> 走路</span></button>
+          <button data-tool="line" class="tool-btn" title="ライン（直線）">―<span class="btn-label"> ライン</span></button>
+          <div class="tool-dd">
+            <button class="tool-btn dd-toggle" data-dd="equip" title="コーン・マーカーを置く">🔺<span class="dd-caret">▾</span></button>
+            <div class="dd-menu" data-dd-menu="equip" hidden>
+              <button data-tool="cone" class="tool-btn" title="コーンを置く">🔺 コーン</button>
+              <button data-tool="marker" class="tool-btn" title="マーカーを置く">🟡 マーカー</button>
+            </div>
+          </div>
         </div>
         <div class="tool-group">
-          <button id="btn-undo" title="ひとつ戻す" disabled>↩ 戻す</button>
-          <button id="btn-clear-annos" title="図形をすべて削除">🗑 図形</button>
+          <button id="btn-undo" title="ひとつ戻す" disabled>↩<span class="btn-label"> 戻す</span></button>
+          <button id="btn-clear-annos" title="図形をすべて削除">🗑<span class="btn-label"> 図形</span></button>
         </div>
         <div class="tool-group">
           <button data-court="full" class="court-btn active">フル</button>
           <button data-court="half" class="court-btn">半面</button>
           <button data-court="blank" class="court-btn">無地</button>
-          <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
+          <button id="btn-orientation" title="コートの縦横を切り替え">🔄<span class="btn-label"> 縦横</span></button>
         </div>
         <div class="tool-group" id="half-facing-group" hidden>
           <button data-facing="left" class="facing-btn active" title="左へ攻める（ゴールは右）">⬅</button>

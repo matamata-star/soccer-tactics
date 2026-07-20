@@ -1876,9 +1876,19 @@ function setTool(tool) {
   updateToolbarUI();
 }
 
+/* ツールバーのドロップダウングループ定義（ボタンのアイコンは直近に選んだツールを表示する） */
+const DD_GROUPS = { shapes: ["circle", "rect", "tri"], equip: ["cone", "marker"] };
+const DD_ICONS = { circle: "◯", rect: "▢", tri: "△", cone: "🔺", marker: "🟡" };
+
 function updateToolbarUI() {
   document.querySelectorAll("[data-tool]").forEach((b) => {
     b.classList.toggle("active", b.dataset.tool === state.tool);
+  });
+  document.querySelectorAll(".dd-toggle").forEach((btn) => {
+    const tools = DD_GROUPS[btn.dataset.dd] || [];
+    const active = tools.includes(state.tool);
+    btn.classList.toggle("active", active);
+    if (active) btn.firstChild.nodeValue = DD_ICONS[state.tool];
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.classList.toggle("active", b.dataset.court === state.courtType);
@@ -2253,6 +2263,24 @@ function setupEventListeners() {
   // ツールバー
   document.querySelectorAll("[data-tool]").forEach((b) => {
     b.addEventListener("click", () => setTool(b.dataset.tool));
+  });
+
+  // ツールのドロップダウン（図形・コーン/マーカー）。トグルで開閉し、外側タップで閉じる
+  const closeAllDD = () => document.querySelectorAll(".dd-menu").forEach((m) => { m.hidden = true; });
+  document.querySelectorAll(".dd-toggle").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const menu = document.querySelector(`[data-dd-menu="${btn.dataset.dd}"]`);
+      const willOpen = menu.hidden;
+      closeAllDD();
+      menu.hidden = !willOpen;
+    });
+  });
+  document.querySelectorAll(".dd-menu [data-tool]").forEach((b) => {
+    b.addEventListener("click", closeAllDD); // ツール選択自体は上の共通リスナーが行う
+  });
+  document.addEventListener("pointerdown", (e) => {
+    if (!e.target.closest || !e.target.closest(".tool-dd")) closeAllDD();
   });
   document.querySelectorAll("[data-court]").forEach((b) => {
     b.addEventListener("click", () => setCourtType(b.dataset.court));

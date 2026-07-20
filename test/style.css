@@ -171,6 +171,44 @@ svg#board {
   border-color: var(--accent-color);
 }
 
+/* ツールのドロップダウングループ（図形・コーン/マーカー） */
+.tool-dd {
+  position: relative;
+}
+
+.dd-caret {
+  font-size: 0.6rem;
+  margin-left: 2px;
+  opacity: 0.7;
+}
+
+.dd-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  background: #101826;
+  border: 1px solid var(--border-panel);
+  border-radius: 12px;
+  padding: 0.3rem;
+  box-shadow: var(--shadow-lg);
+  min-width: 150px;
+}
+
+.dd-menu button {
+  text-align: left;
+}
+
+/* 狭い画面ではツールボタンをアイコンだけにして1行に収める */
+@media (max-width: 640px) {
+  .btn-label {
+    display: none;
+  }
+}
+
 /* 色見本は正方形のチップ。.toolbar button のtransparent背景より
    確実に優先させるため .swatch-group .swatch という2クラスのセレクタで指定する */
 .swatch {
