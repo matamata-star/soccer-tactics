@@ -1,0 +1,4 @@
+# 「ファイルに書き出し」で作った練習メニュー等のバックアップJSONは
+# 個人のローカルデータなので公開リポジトリには含めない
+dist/*.json
+.claude/scheduled_tasks.lock

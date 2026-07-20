@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#080c14">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>[TEST] Tactics Board - サッカー戦術ボード</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body data-env="test">
+  <header>
+    <h1>Tactics Board</h1>
+    <div class="subtitle">サッカー戦術ボード</div>
+  </header>
+
+  <div class="app-container">
+    <!-- ボードエリア -->
+    <section class="board-area">
+      <!-- ツールバー -->
+      <div class="toolbar">
+        <div class="tool-group">
+          <button data-tool="select" class="tool-btn active" title="選択・移動">☝ 選択</button>
+          <button data-tool="circle" class="tool-btn" title="サークルを描く">◯</button>
+          <button data-tool="rect" class="tool-btn" title="スクエアを描く">▢</button>
+          <button data-tool="tri" class="tool-btn" title="三角形を描く">△</button>
+          <button data-tool="arrow-pass" class="tool-btn" title="パス矢印（実線）">→ パス</button>
+          <button data-tool="arrow-run" class="tool-btn" title="走る動き（破線）">⇢ 走路</button>
+          <button data-tool="line" class="tool-btn" title="ライン（直線）">― ライン</button>
+          <button data-tool="cone" class="tool-btn" title="コーンを置く">🔺</button>
+          <button data-tool="marker" class="tool-btn" title="マーカーを置く">🟡</button>
+        </div>
+        <div class="tool-group">
+          <button id="btn-undo" title="ひとつ戻す" disabled>↩ 戻す</button>
+          <button id="btn-clear-annos" title="図形をすべて削除">🗑 図形</button>
+        </div>
+        <div class="tool-group">
+          <button data-court="full" class="court-btn active">フル</button>
+          <button data-court="half" class="court-btn">半面</button>
+          <button data-court="blank" class="court-btn">無地</button>
+          <button id="btn-orientation" title="コートの縦横を切り替え">🔄 縦横</button>
+        </div>
+        <div class="tool-group" id="half-facing-group" hidden>
+          <button data-facing="left" class="facing-btn active" title="左へ攻める（ゴールは右）">⬅</button>
+          <button data-facing="up" class="facing-btn" title="上へ攻める（ゴールは下）">⬆</button>
+          <button data-facing="down" class="facing-btn" title="下へ攻める（ゴールは上）">⬇</button>
+          <button data-facing="right" class="facing-btn" title="右へ攻める（ゴールは左）">➡</button>
+        </div>
+      </div>
+
+      <!-- コート (すべてSVGで描画) -->
+      <div class="board-wrap">
+        <svg id="board" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <radialGradient id="grad-a" cx="35%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#7fe6ff"/>
+              <stop offset="45%" stop-color="#00b4e6"/>
+              <stop offset="100%" stop-color="#0057d8"/>
+            </radialGradient>
+            <radialGradient id="grad-b" cx="35%" cy="30%" r="80%">
+              <stop offset="0%" stop-color="#ff9db4"/>
+              <stop offset="45%" stop-color="#ff416c"/>
+              <stop offset="100%" stop-color="#c9134a"/>
+            </radialGradient>
+            <marker id="ah-pass" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="#ffffff"/>
+            </marker>
+            <marker id="ah-run" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="5" markerHeight="5" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="#ffd54a"/>
+            </marker>
+            <marker id="ah-trail-pass" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(255,255,255,0.9)"/>
+            </marker>
+            <marker id="ah-trail-run-a" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(0,210,255,0.9)"/>
+            </marker>
+            <marker id="ah-trail-run-b" viewBox="0 0 6 6" refX="5" refY="3" markerWidth="4.2" markerHeight="4.2" orient="auto">
+              <path d="M0 0 L6 3 L0 6 Z" fill="rgba(255,65,108,0.9)"/>
+            </marker>
+          </defs>
+          <g id="scene">
+            <g id="layer-pitch"></g>
+            <g id="layer-bench"></g>
+            <g id="layer-anno"></g>
+            <g id="layer-paths"></g>
+            <g id="layer-tokens"></g>
+            <g id="layer-handles"></g>
+          </g>
+        </svg>
+      </div>
+
+      <!-- 再生バー -->
+      <div class="playbar">
+        <button id="btn-prev" class="btn-circle" title="前のコマ">⏮</button>
+        <button id="btn-play" class="btn-circle primary" title="再生 / 一時停止">▶</button>
+        <button id="btn-next" class="btn-circle" title="次のコマ">⏭</button>
+        <div class="timeline-info">
+          <span id="current-frame-num" class="current">1</span>
+          <span id="total-frames-num" class="total">/ 1</span>
+        </div>
+        <button id="btn-add-frame" title="現在の配置を次のコマとして追加">➕ コマ追加</button>
+        <button id="btn-delete-frame" class="danger" title="このコマを削除">✕ コマ削除</button>
+      </div>
+    </section>
+
+    <!-- コントロールパネル -->
+    <aside class="control-sidebar">
+      <details class="panel" id="panel-frames" open>
+        <summary>🎬 コマ一覧・再生設定</summary>
+        <div class="panel-body">
+          <div id="frames-list" class="frames-list"></div>
+          <textarea id="frame-note" class="frame-note" rows="2" maxlength="200" placeholder="このコマのメモ（例: ここでパスを出す）"></textarea>
+          <div class="slider-container">
+            <div class="slider-label">
+              <span>再生速度</span>
+              <span id="speed-val">1.0s / コマ</span>
+            </div>
+            <input type="range" id="speed-slider" min="0.2" max="3.0" step="0.1" value="1.0">
+          </div>
+          <button id="btn-loop-playback">🔁 ループ再生: OFF</button>
+          <button id="btn-toggle-paths">🏹 動きの矢印: ON</button>
+          <button id="btn-clear-frames">⏮ 配置をリセット（全コマ削除）</button>
+        </div>
+      </details>
+
+      <details class="panel" id="panel-team">
+        <summary>👥 人数・フォーメーション</summary>
+        <div class="panel-body">
+          <div class="btn-group-2">
+            <button id="btn-swap-teams" title="青チームと赤チームの場所をまるごと入れ替えます">⇄ 青と赤を入替</button>
+            <button id="btn-align-roles" title="同じ役割（DF・MFなど）のラベルが付いた選手を横一列に揃えます">📏 ラインを揃える</button>
+          </div>
+          <div class="player-count-row">
+            <span class="count-label">両チーム同時</span>
+            <div class="count-controls">
+              <button id="btn-both-dec" class="btn-count">－</button>
+              <span class="count-badge both-badge">A:<span id="player-count-a">8</span> / B:<span id="player-count-b">8</span></span>
+              <button id="btn-both-inc" class="btn-count">＋</button>
+            </div>
+          </div>
+          <div class="player-count-row">
+            <span class="count-label team-a-label">チーム A（青）</span>
+            <div class="count-controls">
+              <button id="btn-a-dec" class="btn-count">－</button>
+              <span class="count-badge a-badge" id="player-count-a-badge">8</span>
+              <button id="btn-a-inc" class="btn-count">＋</button>
+            </div>
+          </div>
+          <div class="player-count-row">
+            <span class="count-label team-b-label">チーム B（赤）</span>
+            <div class="count-controls">
+              <button id="btn-b-dec" class="btn-count">－</button>
+              <span class="count-badge b-badge" id="player-count-b-badge">8</span>
+              <button id="btn-b-inc" class="btn-count">＋</button>
+            </div>
+          </div>
+
+          <div class="formation-section" id="formation-section-a">
+            <h4 class="sub-head team-a-label">チーム A フォーメーション</h4>
+            <div class="btn-group" id="formation-presets-a">
+              <button class="btn-formation-a" data-formation="4-4-2">4-4-2</button>
+              <button class="btn-formation-a" data-formation="4-3-3">4-3-3</button>
+              <button class="btn-formation-a" data-formation="3-5-2">3-5-2</button>
+            </div>
+            <div class="formation-custom" id="formation-custom-a" hidden>
+              <p class="note">11人以外は好きな配置を作って名前を付けて保存できます</p>
+              <div class="save-row">
+                <input id="custom-formation-name-a" placeholder="配置の名前（例: 3-2）" maxlength="20">
+                <button id="btn-save-formation-a" class="primary">保存</button>
+              </div>
+              <div id="custom-formation-list-a" class="saves-list"></div>
+            </div>
+          </div>
+
+          <div class="formation-section" id="formation-section-b">
+            <h4 class="sub-head team-b-label">チーム B フォーメーション</h4>
+            <div class="btn-group" id="formation-presets-b">
+              <button class="btn-formation-b" data-formation="4-4-2">4-4-2</button>
+              <button class="btn-formation-b" data-formation="4-3-3">4-3-3</button>
+              <button class="btn-formation-b" data-formation="3-5-2">3-5-2</button>
+            </div>
+            <div class="formation-custom" id="formation-custom-b" hidden>
+              <p class="note">11人以外は好きな配置を作って名前を付けて保存できます</p>
+              <div class="save-row">
+                <input id="custom-formation-name-b" placeholder="配置の名前（例: 3-2）" maxlength="20">
+                <button id="btn-save-formation-b" class="primary">保存</button>
+              </div>
+              <div id="custom-formation-list-b" class="saves-list"></div>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel" id="panel-save">
+        <summary>💾 保存・読み込み</summary>
+        <div class="panel-body">
+          <div id="active-save-indicator" class="note" hidden>編集中: <strong id="active-save-name"></strong>（「保存」で上書きされます）</div>
+          <div class="save-row">
+            <input id="save-name" placeholder="名前（例: ロンド4対2）" maxlength="30">
+            <button id="btn-save" class="primary">保存</button>
+          </div>
+          <div id="saves-list" class="saves-list"></div>
+          <div class="btn-group-2">
+            <button id="btn-export">📤 ファイルに書き出し</button>
+            <button id="btn-import">📥 ファイルを読み込み</button>
+          </div>
+          <input type="file" id="import-file" accept=".json,application/json" hidden>
+          <p class="note">※ 保存はこの端末のブラウザ内に残ります。別の端末に渡すときはファイル書き出しを使ってください</p>
+        </div>
+      </details>
+
+      <details class="panel" id="panel-settings">
+        <summary>⚙ 設定</summary>
+        <div class="panel-body">
+          <div class="settings-row">
+            <span class="settings-label">コートの色</span>
+            <div class="swatch-group">
+              <button class="swatch active" data-theme="vivid" title="ブライトグリーン" style="--swatch-c:#1f9645"></button>
+              <button class="swatch" data-theme="standard" title="スタンダードグリーン" style="--swatch-c:#1b6b34"></button>
+              <button class="swatch" data-theme="pastel" title="ライトグリーン" style="--swatch-c:#8fd19e"></button>
+              <button class="swatch" data-theme="classic" title="ダークグリーン" style="--swatch-c:#14381d"></button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <span class="settings-label">バージョン</span>
+            <span class="settings-label" id="app-version"></span>
+          </div>
+        </div>
+      </details>
+
+      <details class="panel" id="panel-help">
+        <summary>❓ 使い方</summary>
+        <div class="panel-body help-card">
+          <ul>
+            <li>選手・ボールはドラッグで動かせます。ボールの近くの選手を動かすとボールも一緒に動きます。</li>
+            <li>選手をタップすると番号とラベル（名前・役割）を変えられます。</li>
+            <li>◯・▢・△・矢印・ラインボタンを押してからコート上をドラッグ（またはタップ）すると図形を描けます。図形は全コマ共通です。</li>
+            <li>🔺（コーン）と🟡（マーカー）はタップした場所に置けます。置いた後もドラッグで移動でき、青い複製ボタンで同じものを増やせます。</li>
+            <li>図形をタップすると選択され、移動・サイズ変更・削除（赤い✕）・複製（青いアイコン）ができます。▢と△は緑色のハンドルをドラッグすると回転できます。</li>
+            <li>選手やボールをコマ間で動かすと、その移動が自動でパス（実線）・走路（破線）の矢印として表示されます。</li>
+            <li>芝の色はサイドパネルの「⚙ 設定」で切り替えられます。</li>
+            <li>「コマ追加」で今の配置を保存し、複数コマ作って ▶ で動きを再生します。コマ一覧の下の欄に、そのコマのメモ（やることなど）を書き込めます。</li>
+            <li>11人未満の人数のときは、選手を並べてから「フォーメーション」欄で名前を付けて保存すると、その人数専用の配置として何度も呼び出せます（11人以上はプリセットが使えます。12人目以降は控えに残ります）。</li>
+            <li>半面コートでは⬅⬆⬇➡ボタンで「攻める方向」を選べます（自陣ゴールは反対側に表示されます）。</li>
+            <li>コート下の「控え」エリアに選手をドラッグすると控えにできます（無地コートを除く）。人数は最大20人まで増やせ、12人目以降は自動で控えに入ります。</li>
+            <li>「青と赤を入替」で両チームの場所をまるごと入れ替え、「ラインを揃える」でGK/DF/MF/FWのラベルが付いた選手を一列に整列できます（控えの選手は控え内で整列。固有名を付けた選手は対象外です）。</li>
+            <li>人数を増減すると、GK/DF/MF/FWのラベルがFW:MF:DF=1:2:1の比率で自動的に貼り直されます（固有名を付けた選手は変更されません）。</li>
+            <li>作った作戦は「保存・読み込み」から名前を付けて残せます。名前欄に「編集中」の名前が表示されている間は、そのまま「保存」を押すと上書き保存になります（名前を変えると別の作戦として新規保存されます）。</li>
+            <li>キーボードショートカット: Ctrl+Z（ひとつ戻す）、← →（前後のコマ）、Space（再生/一時停止）、Delete（選択中の図形を削除）、Esc（図形の選択解除）。入力欄にカーソルがあるときは無効です。</li>
+          </ul>
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <!-- 選手ラベル編集ダイアログ -->
+  <div id="editor-backdrop" hidden>
+    <div id="label-editor">
+      <h4 id="edit-title">選手の編集</h4>
+      <label>番号 <input id="edit-num" maxlength="3" inputmode="numeric"></label>
+      <label>ラベル <input id="edit-label" maxlength="10" placeholder="名前・役割など"></label>
+      <div class="editor-actions">
+        <button id="edit-cancel">キャンセル</button>
+        <button id="edit-save" class="primary">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

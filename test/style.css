@@ -1,0 +1,769 @@
+:root {
+  --bg-primary: #080c14;
+  --bg-panel: rgba(15, 22, 36, 0.7);
+  --border-panel: rgba(255, 255, 255, 0.08);
+  --text-primary: #f3f4f6;
+  --text-muted: #9ca3af;
+  --accent-color: #10b981;
+  --team-a-primary: #00d2ff;
+  --team-b-primary: #ff416c;
+  --danger: #ef4444;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Kaku Gothic ProN", "Hiragino Sans", Meiryo, Roboto, sans-serif;
+  --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow-x: hidden;
+}
+
+header {
+  padding: 0.9rem 1.25rem 0.4rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+}
+
+h1 {
+  font-size: 1.35rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #ffffff 0%, var(--text-muted) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  letter-spacing: -0.5px;
+}
+
+.subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+/* ---------- 全体レイアウト ---------- */
+.app-container {
+  display: flex;
+  flex: 1;
+  padding: 0.5rem 1.25rem 1.25rem;
+  gap: 1.25rem;
+  max-width: 1800px;
+  margin: 0 auto;
+  width: 100%;
+  align-items: flex-start;
+}
+
+.board-area {
+  flex: 3;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  position: sticky;
+  top: 0.5rem;
+}
+
+.control-sidebar {
+  flex: 1.2;
+  min-width: 300px;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ---------- コート ---------- */
+.board-wrap {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
+  border: 1px solid var(--border-panel);
+  padding: 0.5rem;
+  display: flex;
+  justify-content: center;
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.5);
+}
+
+svg#board {
+  width: 100%;
+  height: auto;
+  max-height: calc(100vh - 240px);
+  touch-action: none;
+  user-select: none;
+  border-radius: 6px;
+  box-shadow: 0 12px 35px rgba(0, 0, 0, 0.55);
+  display: block;
+}
+
+/* トークン（選手・ボール） */
+.token {
+  cursor: grab;
+}
+.token:active {
+  cursor: grabbing;
+}
+.token .body {
+  stroke: #fff;
+  stroke-width: 0.32;
+}
+.token.team-a .body { fill: url(#grad-a); }
+.token.team-b .body { fill: url(#grad-b); }
+.token text {
+  pointer-events: none;
+  fill: #fff;
+  font-weight: 700;
+  font-family: var(--font-family);
+}
+.token text.lbl {
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 0.3;
+}
+
+.anno {
+  cursor: grab;
+}
+.handle {
+  cursor: pointer;
+}
+
+/* ---------- ツールバー ---------- */
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  align-items: center;
+}
+
+.tool-group {
+  display: flex;
+  gap: 0.3rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-panel);
+  border-radius: 12px;
+  padding: 0.25rem;
+}
+
+.toolbar button {
+  border: 1px solid transparent;
+  background: transparent;
+  min-height: 40px;
+  padding: 0.3rem 0.65rem;
+  white-space: nowrap;
+}
+
+.toolbar button.active {
+  background: rgba(16, 185, 129, 0.22);
+  border-color: var(--accent-color);
+}
+
+/* 色見本は正方形のチップ。.toolbar button のtransparent背景より
+   確実に優先させるため .swatch-group .swatch という2クラスのセレクタで指定する */
+.swatch {
+  width: 34px;
+  height: 34px;
+  min-height: 34px;
+  padding: 0;
+  border-radius: 7px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+}
+
+.swatch-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.swatch-group .swatch {
+  background: var(--swatch-c);
+}
+
+.swatch.active {
+  border-color: #fff;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+/* button.active の緑背景に負けないよう、選択中も本来の色見本を表示する */
+.swatch-group .swatch.active {
+  background: var(--swatch-c);
+}
+
+/* テスト版の目印（deploy_test.ps1 が body に data-env="test" を付けたときだけ表示） */
+body[data-env="test"]::before {
+  content: "テスト版";
+  position: fixed;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  background: #b45309;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  opacity: 0.9;
+}
+
+/* ---------- 設定パネル ---------- */
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.settings-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ---------- 再生バー ---------- */
+.playbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-circle {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+#btn-play.playing {
+  background: rgba(239, 68, 68, 0.25);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.timeline-info {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+  min-width: 64px;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: 10px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border-panel);
+}
+
+.timeline-info .current {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: var(--accent-color);
+}
+
+.timeline-info .total {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* ---------- ボタン共通 ---------- */
+button {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-panel);
+  color: var(--text-primary);
+  padding: 0.55rem 0.8rem;
+  border-radius: 10px;
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 40px;
+  touch-action: manipulation;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+button:active {
+  transform: scale(0.97);
+}
+
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+  transform: none;
+}
+
+button.primary {
+  background: var(--accent-color);
+  color: #04211a;
+  border: none;
+  font-weight: 700;
+}
+
+button.primary:hover {
+  background: #0ea371;
+}
+
+button.danger {
+  color: #fca5a5;
+}
+
+button.toggled-on {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: var(--accent-color);
+}
+
+/* ---------- サイドバーのパネル ---------- */
+details.panel {
+  background: var(--bg-panel);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border-panel);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+details.panel summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.85rem 1rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  user-select: none;
+  display: flex;
+  align-items: center;
+}
+
+details.panel summary::-webkit-details-marker {
+  display: none;
+}
+
+details.panel summary::after {
+  content: "▸";
+  margin-left: auto;
+  color: var(--text-muted);
+  transition: transform 0.15s ease;
+}
+
+details.panel[open] summary::after {
+  transform: rotate(90deg);
+}
+
+.panel-body {
+  padding: 0 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.sub-head {
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-top: 0.3rem;
+}
+
+.formation-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.formation-custom {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.formation-section[hidden],
+.formation-custom[hidden],
+.btn-group[hidden],
+.tool-group[hidden] {
+  display: none;
+}
+
+.note {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.btn-group {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.btn-group-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+/* スライダー */
+.slider-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.slider-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  cursor: pointer;
+}
+
+/* ---------- コマ一覧 ---------- */
+.frames-list {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding: 0.25rem 0;
+  min-height: 56px;
+}
+
+.frame-thumb {
+  position: relative;
+  flex: 0 0 72px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  background: #10301d;
+}
+
+.frame-thumb svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.frame-thumb .thumb-num {
+  position: absolute;
+  top: 2px;
+  left: 4px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.frame-thumb.active {
+  border-color: var(--accent-color);
+  box-shadow: 0 0 8px rgba(16, 185, 129, 0.35);
+}
+
+.frame-thumb:hover:not(.active) {
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.frame-thumb .thumb-note-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-color);
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.6);
+}
+
+.frame-note {
+  width: 100%;
+  resize: vertical;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-panel);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font-family);
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+
+/* ---------- 人数コントロール ---------- */
+.player-count-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.count-label {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.team-a-label { color: var(--team-a-primary); }
+.team-b-label { color: var(--team-b-primary); }
+
+.count-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.btn-count {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  padding: 0;
+  font-size: 1.1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.count-badge {
+  min-width: 52px;
+  text-align: center;
+  padding: 0.3rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-panel);
+}
+
+.both-badge { min-width: 96px; }
+
+.a-badge {
+  background: rgba(0, 210, 255, 0.12);
+  border-color: rgba(0, 210, 255, 0.3);
+  color: var(--team-a-primary);
+}
+
+.b-badge {
+  background: rgba(255, 65, 108, 0.12);
+  border-color: rgba(255, 65, 108, 0.3);
+  color: var(--team-b-primary);
+}
+
+/* ---------- 保存 ---------- */
+.save-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.save-row input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-panel);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font-family);
+  font-size: 0.88rem;
+}
+
+.saves-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.saves-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.3rem 0;
+}
+
+.save-row-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-panel);
+  border-radius: 10px;
+  padding: 0.4rem 0.6rem;
+}
+
+.save-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.save-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.save-date {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+.save-row-item button {
+  min-height: 36px;
+  padding: 0.3rem 0.6rem;
+  flex-shrink: 0;
+}
+
+/* ---------- ヘルプ ---------- */
+.help-card {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.help-card ul {
+  padding-left: 1.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+/* ---------- ラベル編集ダイアログ ---------- */
+#editor-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 15vh;
+}
+
+#editor-backdrop[hidden] {
+  display: none;
+}
+
+#label-editor {
+  background: #101828;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 1.25rem;
+  width: min(320px, calc(100vw - 2rem));
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+  box-shadow: var(--shadow-lg);
+}
+
+#label-editor h4 {
+  font-size: 0.95rem;
+}
+
+#label-editor label {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+#label-editor input {
+  flex: 1;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-panel);
+  border-radius: 10px;
+  color: var(--text-primary);
+  padding: 0.55rem 0.7rem;
+  font-family: var(--font-family);
+  font-size: 1rem;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+/* ---------- スマホレイアウト ---------- */
+@media (max-width: 900px) {
+  header {
+    padding: 0.6rem 0.75rem 0.2rem;
+  }
+
+  h1 {
+    font-size: 1.1rem;
+  }
+
+  .app-container {
+    flex-direction: column;
+    padding: 0.25rem 0.6rem 1rem;
+    gap: 0.6rem;
+  }
+
+  .board-area {
+    position: static;
+    width: 100%;
+  }
+
+  .board-wrap {
+    padding: 0.3rem;
+    border-radius: 12px;
+  }
+
+  svg#board {
+    max-height: 66vh;
+  }
+
+  .control-sidebar {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
+  }
+
+  .toolbar {
+    gap: 0.3rem 0.4rem;
+  }
+
+  .toolbar button {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.8rem;
+  }
+
+  .playbar {
+    justify-content: center;
+  }
+}
