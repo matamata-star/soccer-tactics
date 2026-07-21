@@ -912,6 +912,24 @@ function currentFrame() {
   return state.frames[state.currentFrameIndex];
 }
 
+/* 軌跡の1区間（p0→p1）をトークン種別に応じた色・線種で描く */
+function appendTrailSeg(id, p0, p1, isBall) {
+  if (!p0 || !p1 || dist(p0, p1) < 0.3) return; // ほとんど動いていない区間は出さない
+  const attrs = {
+    x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
+    x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
+    "stroke-linecap": "round", "pointer-events": "none",
+  };
+  if (isBall) {
+    Object.assign(attrs, { stroke: "rgba(255,255,255,0.85)", "stroke-width": 0.28, "marker-end": "url(#ah-trail-pass)" });
+  } else if (id.startsWith("p-a")) {
+    Object.assign(attrs, { stroke: "rgba(0,210,255,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1", "marker-end": "url(#ah-trail-run-a)" });
+  } else {
+    Object.assign(attrs, { stroke: "rgba(255,65,108,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1", "marker-end": "url(#ah-trail-run-b)" });
+  }
+  el("line", attrs, layers.paths);
+}
+
 /* ---------- 動きの矢印（コマ間の移動を自動でパス/走路矢印として表示） ----------
    現在表示中のコマまでの移動だけを描く。コマ1（初期位置）は軌跡なし、
    コマ3なら1→2→3の軌跡、という累積表示にする。 */
@@ -923,36 +941,28 @@ function drawPaths() {
   const ids = [...activeIds(), "ball"];
   for (const id of ids) {
     const isBall = id === "ball";
-
     for (let i = 1; i <= upto; i++) {
       const f0 = state.frames[i - 1], f1 = state.frames[i];
-      const p0 = f0 && f0[id], p1 = f1 && f1[id];
-      if (!p0 || !p1) continue;
-      if (dist(p0, p1) < 0.3) continue; // ほとんど動いていない区間は矢印を出さない
-
-      const attrs = {
-        x1: p0.x.toFixed(2), y1: p0.y.toFixed(2),
-        x2: p1.x.toFixed(2), y2: p1.y.toFixed(2),
-        "stroke-linecap": "round", "pointer-events": "none",
-      };
-      if (isBall) {
-        Object.assign(attrs, {
-          stroke: "rgba(255,255,255,0.85)", "stroke-width": 0.28,
-          "marker-end": "url(#ah-trail-pass)",
-        });
-      } else if (id.startsWith("p-a")) {
-        Object.assign(attrs, {
-          stroke: "rgba(0,210,255,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1",
-          "marker-end": "url(#ah-trail-run-a)",
-        });
-      } else {
-        Object.assign(attrs, {
-          stroke: "rgba(255,65,108,0.75)", "stroke-width": 0.28, "stroke-dasharray": "1.1 1.1",
-          "marker-end": "url(#ah-trail-run-b)",
-        });
-      }
-      el("line", attrs, layers.paths);
+      appendTrailSeg(id, f0 && f0[id], f1 && f1[id], isBall);
     }
+  }
+}
+
+/* アニメーション中の軌跡: 確定済みの累積区間に加え、前進中は「出発点→現在位置」まで
+   軌跡を伸ばして、ボールの移動と軌跡が同時に伸びて見えるようにする。 */
+function drawPathsAnimating(fromIndex, from, pos, targetIndex) {
+  layers.paths.innerHTML = "";
+  if (!state.showPaths) return;
+  const base = Math.min(fromIndex, targetIndex);
+  const ids = [...activeIds(), "ball"];
+  for (const id of ids) {
+    const isBall = id === "ball";
+    for (let i = 1; i <= base; i++) {
+      const f0 = state.frames[i - 1], f1 = state.frames[i];
+      appendTrailSeg(id, f0 && f0[id], f1 && f1[id], isBall);
+    }
+    // 前進アニメーション中は、動いている区間を現在位置まで伸ばす
+    if (targetIndex > fromIndex) appendTrailSeg(id, from[id], pos[id], isBall);
   }
 }
 
@@ -1133,6 +1143,7 @@ function animateToFrame(idx, durMs, done) {
   const my = animCounter;
   const to = state.frames[idx];
   if (!to) return;
+  const fromIndex = state.currentFrameIndex; // 出発したコマ（軌跡を伸ばす基準）
   const from = {};
   for (const id of Object.keys(tokenEls)) {
     from[id] = lastRendered[id] ? { ...lastRendered[id] } : (to[id] ? { ...to[id] } : null);
@@ -1153,6 +1164,7 @@ function animateToFrame(idx, durMs, done) {
       pos[id] = { x: a.x + (b.x - a.x) * e, y: a.y + (b.y - a.y) * e };
     }
     updateTokenPositions(pos);
+    drawPathsAnimating(fromIndex, from, pos, idx); // 軌跡をボールの移動と同時に伸ばす
     if (k < 1) {
       requestAnimationFrame(tick);
     } else {
