@@ -7,7 +7,7 @@
    - 図形（サークル/スクエア/矢印）は全コマ共通の注釈レイヤー
    ========================================================= */
 
-const APP_VERSION = "0.1"; // 版数（⚙設定パネルに表示。リリースごとに更新する）
+const APP_VERSION = "0.2"; // 版数（⚙設定パネルに表示）。本番反映のたびに+0.1する
 const APP_URL = "https://matamata-star.github.io/soccer-tactics/"; // 配布用の本番URL（設定パネルに表示）
 
 /* ---------- コート定義 ---------- */
@@ -211,6 +211,17 @@ const court = () => COURTS[state.courtType];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const deep = (o) => JSON.parse(JSON.stringify(o));
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+/* 点ptと線分ab の最短距離（経由点をどの区間に挿すか判定するのに使う） */
+function distToSegment(pt, a, b) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len2 = dx * dx + dy * dy;
+  let t = len2 > 0 ? ((pt.x - a.x) * dx + (pt.y - a.y) * dy) / len2 : 0;
+  t = clamp(t, 0, 1);
+  return dist(pt, { x: a.x + t * dx, y: a.y + t * dy });
+}
+
+const MAX_WAYPOINTS = 8; // 1本の矢印に付けられる経由点の上限
 
 let annoSeq = 0;
 const newAnnoId = () => `anno_${Date.now().toString(36)}_${annoSeq++}`;
@@ -471,6 +482,52 @@ function annoStrokeColor(a) {
   return "#ffd54a";
 }
 
+/* 矢印の全通過点 [始点, ...経由点(mid), 終点] */
+function arrowPoints(a) {
+  const pts = [{ x: a.x1, y: a.y1 }];
+  if (Array.isArray(a.mid)) for (const m of a.mid) pts.push({ x: m.x, y: m.y });
+  pts.push({ x: a.x2, y: a.y2 });
+  return pts;
+}
+
+/* 通過点を滑らかにつなぐSVGパスのd属性。経由点なし=直線。
+   経由点あり=centripetal Catmull-Romスプライン（全点を必ず通り、鋭角でも暴れにくい） */
+function arrowPathD(a) {
+  const P = arrowPoints(a);
+  const f = (v) => v.toFixed(2);
+  if (P.length === 2) return `M ${f(P[0].x)} ${f(P[0].y)} L ${f(P[1].x)} ${f(P[1].y)}`;
+  const eps = 1e-4, alpha = 0.5;
+  let d = `M ${f(P[0].x)} ${f(P[0].y)}`;
+  for (let i = 0; i < P.length - 1; i++) {
+    const p0 = P[i - 1] || P[i], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2] || P[i + 1];
+    const t01 = Math.max(eps, Math.pow(dist(p0, p1), alpha));
+    const t12 = Math.max(eps, Math.pow(dist(p1, p2), alpha));
+    const t23 = Math.max(eps, Math.pow(dist(p2, p3), alpha));
+    const m1x = p2.x - p1.x + t12 * ((p1.x - p0.x) / t01 - (p2.x - p0.x) / (t01 + t12));
+    const m1y = p2.y - p1.y + t12 * ((p1.y - p0.y) / t01 - (p2.y - p0.y) / (t01 + t12));
+    const m2x = p2.x - p1.x + t12 * ((p3.x - p2.x) / t23 - (p3.x - p1.x) / (t12 + t23));
+    const m2y = p2.y - p1.y + t12 * ((p3.y - p2.y) / t23 - (p3.y - p1.y) / (t12 + t23));
+    const c1x = p1.x + m1x / 3, c1y = p1.y + m1y / 3;
+    const c2x = p2.x - m2x / 3, c2y = p2.y - m2y / 3;
+    d += ` C ${f(c1x)} ${f(c1y)} ${f(c2x)} ${f(c2y)} ${f(p2.x)} ${f(p2.y)}`;
+  }
+  return d;
+}
+
+/* ポインタ位置ptに最も近い区間へ経由点を挿入し、そのmid配列内インデックスを返す（満杯なら-1） */
+function insertWaypointAt(a, pt) {
+  if (!Array.isArray(a.mid)) a.mid = [];
+  if (a.mid.length >= MAX_WAYPOINTS) return -1;
+  const P = arrowPoints(a);
+  let bestI = 0, bestD = Infinity;
+  for (let i = 0; i < P.length - 1; i++) {
+    const d = distToSegment(pt, P[i], P[i + 1]);
+    if (d < bestD) { bestD = d; bestI = i; }
+  }
+  a.mid.splice(bestI, 0, { x: pt.x, y: pt.y });
+  return bestI;
+}
+
 function buildAnnoEl(a) {
   const g = el("g", { class: "anno" + (state.selectedAnno === a.id ? " selected" : ""), "data-anno": a.id });
   const sw = 0.45;
@@ -508,15 +565,16 @@ function buildAnnoEl(a) {
   } else if (a.type === "arrow") {
     const dash = a.style === "run" ? "1.6 1.2" : null;
     const markerId = a.style === "run" ? "ah-run" : a.style === "pass" ? "ah-pass" : null;
-    el("line", {
-      x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2,
-      stroke: color, "stroke-width": sw, "stroke-dasharray": dash,
+    const dPath = arrowPathD(a);
+    el("path", {
+      d: dPath, fill: "none",
+      stroke: color, "stroke-width": sw, "stroke-dasharray": dash, "stroke-linecap": "round", "stroke-linejoin": "round",
       "marker-end": markerId ? `url(#${markerId})` : null,
     }, g);
-    // タッチしやすいように透明の太い当たり判定を重ねる
-    el("line", {
-      x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2,
-      stroke: "rgba(0,0,0,0)", "stroke-width": Math.max(3, 26 / pxPerMeter()),
+    // タッチしやすいように透明の太い当たり判定を重ねる（長押しでの経由点追加もこれで拾う）
+    el("path", {
+      d: dPath, fill: "none",
+      stroke: "rgba(0,0,0,0)", "stroke-width": Math.max(3, 26 / pxPerMeter()), "stroke-linecap": "round",
     }, g);
   }
   return g;
@@ -550,10 +608,7 @@ function annoBBox(a) {
     ];
     return bboxOfPts(corners);
   }
-  return {
-    minX: Math.min(a.x1, a.x2), minY: Math.min(a.y1, a.y2),
-    maxX: Math.max(a.x1, a.x2), maxY: Math.max(a.y1, a.y2),
-  };
+  return bboxOfPts(arrowPoints(a)); // 経由点も含めた外接枠
 }
 
 function renderHandles() {
@@ -612,6 +667,21 @@ function renderHandles() {
   } else if (a.type === "arrow") {
     mkHandle(a.x1, a.y1, "p1");
     mkHandle(a.x2, a.y2, "p2");
+    // 経由点＝オレンジのハンドル（ドラッグで曲げる）＋小さな赤い×（その点だけ削除）
+    if (Array.isArray(a.mid)) {
+      a.mid.forEach((m, i) => {
+        mkHandle(m.x, m.y, "wp:" + i, "#f59e0b");
+        const off = hr * 1.5;
+        const dxx = clamp(m.x + off, 2, W - 2), dyy = clamp(m.y - off, 2, H - 2);
+        const wd = el("g", { class: "handle handle-delete", "data-role": "wpdel:" + i, transform: `translate(${dxx} ${dyy})` }, L);
+        el("circle", { r: hr * 1.3, fill: "transparent" }, wd);
+        el("circle", { r: hr * 0.82, fill: "#ef4444", stroke: "#fff", "stroke-width": 0.14 }, wd);
+        const cc = hr * 0.38;
+        const csw = Math.max(0.2, hr * 0.15);
+        el("line", { x1: -cc, y1: -cc, x2: cc, y2: cc, stroke: "#fff", "stroke-width": csw, "stroke-linecap": "round" }, wd);
+        el("line", { x1: -cc, y1: cc, x2: cc, y2: -cc, stroke: "#fff", "stroke-width": csw, "stroke-linecap": "round" }, wd);
+      });
+    }
   }
 
   // 削除ボタン（右上）。回転ハンドルの位置も含めた外接枠の外側に、
@@ -666,6 +736,7 @@ function duplicateAnno(id) {
   } else if (copy.type === "arrow") {
     copy.x1 = clamp(copy.x1 + off, 0, W); copy.y1 = clamp(copy.y1 + off, 0, H);
     copy.x2 = clamp(copy.x2 + off, 0, W); copy.y2 = clamp(copy.y2 + off, 0, H);
+    if (Array.isArray(copy.mid)) copy.mid = copy.mid.map((m) => ({ x: clamp(m.x + off, 0, W), y: clamp(m.y + off, 0, H) }));
   }
   state.annotations.push(copy);
   selectAnno(copy.id);
@@ -841,19 +912,22 @@ function currentFrame() {
   return state.frames[state.currentFrameIndex];
 }
 
-/* ---------- 動きの矢印（コマ間の移動を自動でパス/走路矢印として表示） ---------- */
+/* ---------- 動きの矢印（コマ間の移動を自動でパス/走路矢印として表示） ----------
+   現在表示中のコマまでの移動だけを描く。コマ1（初期位置）は軌跡なし、
+   コマ3なら1→2→3の軌跡、という累積表示にする。 */
 function drawPaths() {
   layers.paths.innerHTML = "";
-  if (!state.showPaths || state.frames.length < 2) return;
+  const upto = state.currentFrameIndex;
+  if (!state.showPaths || upto < 1) return;
 
   const ids = [...activeIds(), "ball"];
   for (const id of ids) {
-    const pts = state.frames.map((f) => f[id]).filter(Boolean);
-    if (pts.length < 2) continue;
     const isBall = id === "ball";
 
-    for (let i = 1; i < pts.length; i++) {
-      const p0 = pts[i - 1], p1 = pts[i];
+    for (let i = 1; i <= upto; i++) {
+      const f0 = state.frames[i - 1], f1 = state.frames[i];
+      const p0 = f0 && f0[id], p1 = f1 && f1[id];
+      if (!p0 || !p1) continue;
       if (dist(p0, p1) < 0.3) continue; // ほとんど動いていない区間は矢印を出さない
 
       const attrs = {
@@ -1048,6 +1122,7 @@ function cancelAnim() {
     state.currentFrameIndex = target;
     updateTokenPositions(currentFrame());
     updateHUD();
+    drawPaths(); // 累積軌跡を現在のコマに合わせて更新
   }
 }
 
@@ -1084,6 +1159,7 @@ function animateToFrame(idx, durMs, done) {
       activeAnim = null;
       state.currentFrameIndex = idx;
       updateHUD();
+      drawPaths(); // 累積軌跡を現在のコマに合わせて更新（再生中も含む）
       if (done) done();
     }
   }
@@ -1187,7 +1263,7 @@ function buildThumbSvg(frame) {
     } else if (a.type === "marker") {
       el("circle", { cx: a.x, cy: a.y, r: 0.9, fill: "rgba(255,226,62,0.85)" }, s);
     } else if (a.type === "arrow") {
-      el("line", { x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, stroke: "rgba(255,255,255,0.4)", "stroke-width": 0.8 }, s);
+      el("path", { d: arrowPathD(a), fill: "none", stroke: "rgba(255,255,255,0.4)", "stroke-width": 0.8, "stroke-linejoin": "round" }, s);
     }
   }
   for (const id of activeIds()) {
@@ -1294,7 +1370,17 @@ function sanitizeAnno(raw) {
     const x1 = n(raw.x1), y1 = n(raw.y1), x2 = n(raw.x2), y2 = n(raw.y2);
     if (x1 === null || y1 === null || x2 === null || y2 === null) return null;
     const style = ["pass", "run", "line"].includes(raw.style) ? raw.style : "pass";
-    return { id, type: "arrow", style, x1, y1, x2, y2 };
+    const a = { id, type: "arrow", style, x1, y1, x2, y2 };
+    if (Array.isArray(raw.mid)) {
+      const mid = [];
+      for (const m of raw.mid) {
+        const mx = n(m && m.x), my = n(m && m.y);
+        if (mx !== null && my !== null) mid.push({ x: mx, y: my });
+        if (mid.length >= MAX_WAYPOINTS) break;
+      }
+      if (mid.length) a.mid = mid;
+    }
+    return a;
   }
   return null;
 }
@@ -1644,6 +1730,7 @@ function setCourtType(type) {
     } else if (a.type === "arrow") {
       a.x1 = clamp(a.x1 * sx, 0, n.W); a.y1 = clamp(a.y1 * sy, 0, n.H);
       a.x2 = clamp(a.x2 * sx, 0, n.W); a.y2 = clamp(a.y2 * sy, 0, n.H);
+      if (Array.isArray(a.mid)) a.mid = a.mid.map((m) => ({ x: clamp(m.x * sx, 0, n.W), y: clamp(m.y * sy, 0, n.H) }));
     }
   }
   renderAll();
@@ -1981,6 +2068,20 @@ function updateToolbarUI() {
 
 /* ---------- ポインター操作 ---------- */
 let drag = null;
+let longPressTimer = null;       // 矢印の線を長押しして経由点を追加するためのタイマー
+const LONG_PRESS_MS = 2000;      // 長押し判定の時間（動かさず約2秒。通常のドラッグと混ざらないよう長め）
+
+/* 矢印の経由点をひとつ削除する */
+function deleteWaypoint(id, idx) {
+  const a = getAnno(id);
+  if (!a || a.type !== "arrow" || !Array.isArray(a.mid) || idx < 0 || idx >= a.mid.length) return;
+  pushUndo();
+  a.mid.splice(idx, 1);
+  if (a.mid.length === 0) delete a.mid;
+  renderAnnotations();
+  renderHandles();
+  scheduleAutosave();
+}
 
 function onPointerDown(e) {
   if (e.pointerType === "mouse" && e.button !== 0) return;
@@ -2019,12 +2120,16 @@ function onPointerDown(e) {
       if (state.selectedAnno) duplicateAnno(state.selectedAnno);
       return;
     }
+    if (role.startsWith("wpdel:")) {
+      deleteWaypoint(state.selectedAnno, parseInt(role.slice(6), 10));
+      return;
+    }
     beginHandleDrag(role, pt);
   } else if (hitToken) {
     beginTokenDrag(hitToken, pt, e);
   } else if (annoG) {
     selectAnno(annoG.dataset.anno);
-    beginAnnoDrag(pt);
+    beginAnnoDrag(pt, e);
   } else {
     selectAnno(null);
     return;
@@ -2080,10 +2185,31 @@ function beginTokenDrag(id, pt, e) {
   }
 }
 
-function beginAnnoDrag(pt) {
+function beginAnnoDrag(pt, e) {
   const a = getAnno(state.selectedAnno);
   if (!a) return;
-  drag = { mode: "anno", start: pt, orig: deep(a), moved: false, undoPushed: false };
+  drag = {
+    mode: "anno", start: pt, orig: deep(a), moved: false, undoPushed: false,
+    startClientX: e ? e.clientX : null, startClientY: e ? e.clientY : null,
+  };
+  // 矢印は線の上を長押し（動かさず約2秒）で経由点を追加できる
+  if (a.type === "arrow") {
+    clearTimeout(longPressTimer);
+    const pressPt = { x: pt.x, y: pt.y };
+    const targetId = a.id;
+    longPressTimer = setTimeout(() => {
+      if (!drag || drag.mode !== "anno" || drag.moved) return;
+      const cur = getAnno(state.selectedAnno);
+      if (!cur || cur.id !== targetId) return;
+      pushUndo();
+      const idx = insertWaypointAt(cur, pressPt);
+      if (idx < 0) { undoStack.pop(); updateUndoUI(); return; } // 経由点が上限で追加できない
+      // 追加した経由点をそのままドラッグして曲げられるよう handle 操作へ切り替える
+      drag = { mode: "handle", role: "wp:" + idx, start: pressPt, orig: deep(cur), moved: true, undoPushed: true };
+      renderAnnotations();
+      renderHandles();
+    }, LONG_PRESS_MS);
+  }
 }
 
 function beginHandleDrag(role, pt) {
@@ -2150,7 +2276,11 @@ function onPointerMove(e) {
     const a = getAnno(state.selectedAnno);
     if (!a) return;
     if (!drag.moved) {
+      // 微小な揺れは無視（長押し中の手ブレでキャンセルしない）。動かしたら移動＝長押しは中止
+      const movedPx = drag.startClientX != null ? Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY) : 999;
+      if (movedPx < 5) return;
       drag.moved = true;
+      clearTimeout(longPressTimer);
       if (!drag.undoPushed) { pushUndo(); drag.undoPushed = true; }
     }
     const dx = pt.x - drag.start.x;
@@ -2164,10 +2294,14 @@ function onPointerMove(e) {
       a.x = clamp(o.x + dx, -a.w / 2, W - a.w / 2);
       a.y = clamp(o.y + dy, -a.h / 2, H - a.h / 2);
     } else if (a.type === "arrow") {
-      const cdx = clamp(dx, -Math.min(o.x1, o.x2), W - Math.max(o.x1, o.x2));
-      const cdy = clamp(dy, -Math.min(o.y1, o.y2), H - Math.max(o.y1, o.y2));
+      const oPts = arrowPoints(o);
+      const minX = Math.min(...oPts.map((p) => p.x)), maxX = Math.max(...oPts.map((p) => p.x));
+      const minY = Math.min(...oPts.map((p) => p.y)), maxY = Math.max(...oPts.map((p) => p.y));
+      const cdx = clamp(dx, -minX, W - maxX);
+      const cdy = clamp(dy, -minY, H - maxY);
       a.x1 = o.x1 + cdx; a.y1 = o.y1 + cdy;
       a.x2 = o.x2 + cdx; a.y2 = o.y2 + cdy;
+      if (Array.isArray(o.mid)) a.mid = o.mid.map((m) => ({ x: m.x + cdx, y: m.y + cdy }));
     }
     renderAnnotations();
     renderHandles();
@@ -2202,7 +2336,11 @@ function onPointerMove(e) {
     } else if (a.type === "arrow") {
       const px = clamp(pt.x, 0, W), py = clamp(pt.y, 0, H);
       if (drag.role === "p1") { a.x1 = px; a.y1 = py; }
-      else { a.x2 = px; a.y2 = py; }
+      else if (drag.role === "p2") { a.x2 = px; a.y2 = py; }
+      else if (drag.role && drag.role.startsWith("wp:")) {
+        const idx = parseInt(drag.role.slice(3), 10);
+        if (Array.isArray(a.mid) && a.mid[idx]) { a.mid[idx].x = px; a.mid[idx].y = py; }
+      }
     }
     renderAnnotations();
     renderHandles();
@@ -2229,6 +2367,7 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+  clearTimeout(longPressTimer);
   if (!drag) return;
   const d = drag;
   drag = null;
